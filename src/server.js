@@ -19,7 +19,7 @@ app.use('/api/quiz', quizRouter);
 app.use('/api/stats', statsRouter);
 
 // SPA fallback -- serve index.html for all non-API routes
-app.get('*', (req, res) => {
+app.get('/{*path}', (req, res) => {
   res.sendFile(path.join(__dirname, '..', 'public', 'index.html'));
 });
 
@@ -32,3 +32,5 @@ app.use((err, req, res, next) => {
 app.listen(PORT, () => {
   console.log(`Word Quiz server running on port ${PORT}`);
 });
+
+export default app;
