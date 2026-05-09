@@ -1,0 +1,11 @@
+services:
+  word-quiz:
+    build: .
+    ports:
+      - "3000:3000"
+    volumes:
+      - word-data:/app/data
+    restart: unless-stopped
+
+volumes:
+  word-data:
