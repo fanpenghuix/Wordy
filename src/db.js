@@ -63,7 +63,7 @@ if (wordsColumns.length === 0) {
 // Migration: create default admin user and migrate existing data
 const adminExists = db.prepare('SELECT COUNT(*) as count FROM users').get().count > 0;
 if (!adminExists) {
-  const hash = bcrypt.hashSync('Admin123456.', 10);
+  const hash = bcrypt.hashSync('Admin@123456.', 10);
   db.prepare('INSERT INTO users (username, password_hash, role) VALUES (?, ?, ?)').run('admin', hash, 'admin');
 }
 
@@ -76,5 +76,22 @@ if (admin) {
 
 // Per-user uniqueness of english words (idempotent)
 db.exec(`CREATE UNIQUE INDEX IF NOT EXISTS idx_words_user_english ON words(user_id, english)`);
+
+// SM-2 spaced repetition reviews
+db.exec(`
+  CREATE TABLE IF NOT EXISTS sm2_reviews (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    user_id INTEGER NOT NULL REFERENCES users(id),
+    word_id INTEGER NOT NULL REFERENCES words(id),
+    interval INTEGER NOT NULL DEFAULT 0,
+    efactor REAL NOT NULL DEFAULT 2.5,
+    repetitions INTEGER NOT NULL DEFAULT 0,
+    next_review TEXT NOT NULL,
+    last_review TEXT,
+    created_at TEXT NOT NULL DEFAULT (datetime('now')),
+    UNIQUE(user_id, word_id)
+  );
+`);
+db.exec(`CREATE INDEX IF NOT EXISTS idx_sm2_reviews_next_review ON sm2_reviews(next_review)`);
 
 export default db;
