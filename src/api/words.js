@@ -48,6 +48,7 @@ router.put('/:id', (req, res) => {
 router.delete('/:id', (req, res) => {
   const id = Number(req.params.id);
   db.prepare('DELETE FROM quiz_records WHERE word_id = ?').run(id);
+  db.prepare('DELETE FROM sm2_reviews WHERE word_id = ?').run(id);
   const result = db.prepare('DELETE FROM words WHERE id = ? AND user_id = ?').run(id, req.userId);
 
   if (result.changes === 0) {
