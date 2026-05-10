@@ -9,6 +9,8 @@ function quizApp() {
     loginPassword: '',
     loginError: '',
     loginLoading: false,
+    showPassword: false,
+    rememberMe: false,
 
     // Quiz state
     loading: false,
@@ -64,13 +66,79 @@ function quizApp() {
     pendingSpeed: 0.85,
     pendingVoiceName: '',
 
+    // ===== Hash Routing =====
+
+    routeMap: {
+      '': { view: 'quiz' },
+      '/': { view: 'quiz' },
+      '/login': { view: 'login' },
+      '/admin': { view: 'admin', adminTab: 'voice' },
+      '/admin/voice': { view: 'admin', adminTab: 'voice' },
+      '/admin/words': { view: 'admin', adminTab: 'words' },
+      '/admin/stats': { view: 'admin', adminTab: 'stats' },
+      '/admin/users': { view: 'admin', adminTab: 'users' },
+    },
+
+    getRouteHash() {
+      const hash = location.hash.slice(1);
+      if (this.routeMap[hash]) return hash;
+      if (hash.startsWith('/admin')) return '/admin';
+      return '/';
+    },
+
+    applyRoute(hash) {
+      const route = this.routeMap[hash] || { view: 'quiz' };
+      const oldView = this.view;
+      this.view = route.view;
+      if (route.adminTab) this.adminTab = route.adminTab;
+      if (route.view === 'quiz' && this.currentUser && this.quizWords.length === 0 && !this.loading) {
+        this.startQuiz();
+      }
+      if (route.view === 'admin') {
+        if (this.adminTab === 'voice' && this.speakVoices.length === 0) this.loadVoices();
+        if (this.adminTab === 'words' && this.allWords.length === 0) this.fetchWords();
+      }
+      // Prevent redundant history push on init
+      if (oldView !== 'login' || hash !== this.getRouteHash()) {
+        this.pushHash(hash);
+      }
+    },
+
+    pushHash(hash) {
+      const target = hash.startsWith('#') ? hash : '#' + hash;
+      if (location.hash !== target) {
+        history.replaceState(null, '', target);
+      }
+    },
+
+    handleHashChange() {
+      const hash = this.getRouteHash();
+      if (this.currentUser || hash === '/login') {
+        this.applyRoute(hash);
+      }
+    },
+
+    navigate(hash) {
+      this.pushHash(hash);
+      this.handleHashChange();
+    },
+
     async init() {
+      // Restore remembered credentials
+      const saved = localStorage.getItem('loginUsername');
+      if (saved) {
+        this.loginUsername = saved;
+        this.loginPassword = localStorage.getItem('loginPassword') || '';
+        this.rememberMe = true;
+      }
+
+      window.addEventListener('hashchange', () => this.handleHashChange());
+
       try {
         const res = await fetch('/api/auth/me');
         if (res.ok) {
           const data = await res.json();
           this.currentUser = data.user;
-          this.view = 'quiz';
           await this.loadVoices();
           if (this.speakVoiceName) {
             const voices = this.getVoicesForGender(this.speakGender);
@@ -78,10 +146,21 @@ function quizApp() {
             if (!found) this.speakVoiceName = voices.length > 0 ? voices[0].name : '';
           }
           await this.startQuiz();
+          const hash = this.getRouteHash();
+          if (hash === '/login') {
+            this.applyRoute('/');
+          } else {
+            this.applyRoute(hash);
+          }
           return;
         }
       } catch (e) { /* not logged in */ }
-      this.view = 'login';
+      const hash = this.getRouteHash();
+      if (hash === '/login' || hash === '/' || hash === '') {
+        this.applyRoute('/login');
+      } else {
+        this.applyRoute(hash);
+      }
     },
 
     async login() {
@@ -95,12 +174,19 @@ function quizApp() {
         });
         const data = await res.json();
         if (res.ok) {
+          if (this.rememberMe) {
+            localStorage.setItem('loginUsername', this.loginUsername);
+            localStorage.setItem('loginPassword', this.loginPassword);
+          } else {
+            localStorage.removeItem('loginUsername');
+            localStorage.removeItem('loginPassword');
+          }
           this.currentUser = data.user;
           this.loginUsername = '';
           this.loginPassword = '';
-          this.view = 'quiz';
           await this.loadVoices();
           await this.startQuiz();
+          this.navigate('/');
         } else {
           this.loginError = data.error || '登录失败';
         }
@@ -115,9 +201,9 @@ function quizApp() {
         await fetch('/api/auth/logout', { method: 'POST' });
       } catch (e) { /* ignore */ }
       this.currentUser = null;
-      this.view = 'login';
       this.quizWords = [];
       this.allWords = [];
+      this.navigate('/login');
     },
 
     async loadVoices() {
@@ -358,6 +444,7 @@ function quizApp() {
 
     setStatsTab(tab) {
       this.statsTab = tab;
+      this.pushHash('/admin/stats');
       if (tab === 'word') this.loadAllWordStats();
       if (tab === 'daily' && this.dailyStats.length === 0) this.loadDailyStats();
       if (tab === 'trend' && this.trendData.length === 0) this.loadTrendData();
