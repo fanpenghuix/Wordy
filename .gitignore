@@ -3,3 +3,5 @@ data/
 data-test/
 data-*
 .superpowers/
+google-credentials.json
+docker-compose.override.yml

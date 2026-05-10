@@ -70,6 +70,7 @@ function quizApp() {
     pendingVoiceName: '',
 
     // Auth gate: hash changes ignored until /me resolves
+    _initCalled: false,
     authReady: false,
 
     // ===== Hash Routing =====
@@ -136,6 +137,8 @@ function quizApp() {
     },
 
     async init() {
+      if (this._initCalled) return;
+      this._initCalled = true;
       // Restore remembered credentials
       const saved = localStorage.getItem('loginUsername');
       if (saved) {
@@ -262,6 +265,7 @@ function quizApp() {
     },
 
     async startQuiz() {
+      this._quizInitialized = true;
       this.loading = true;
       this.revealed = false;
       this.answered = false;
@@ -278,7 +282,6 @@ function quizApp() {
         console.error('Failed to load quiz:', e);
       }
       this.loading = false;
-      this._quizInitialized = true;
     },
 
     reveal() {

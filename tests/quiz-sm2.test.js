@@ -2,20 +2,23 @@ import { describe, it, expect, beforeAll } from 'vitest';
 import request from 'supertest';
 import app from '../src/server.js';
 import db from '../src/db.js';
+import bcrypt from 'bcrypt';
 
 describe('Quiz API with SM-2', () => {
   let agent;
   let userId;
 
-  beforeAll(() => {
+  beforeAll(async () => {
     agent = request.agent(app);
     // Create a test user and login
     db.prepare("DELETE FROM quiz_records WHERE user_id = (SELECT id FROM users WHERE username = 'quiz_test_user')").run();
     db.prepare("DELETE FROM sm2_reviews WHERE user_id = (SELECT id FROM users WHERE username = 'quiz_test_user')").run();
     db.prepare("DELETE FROM words WHERE user_id = (SELECT id FROM users WHERE username = 'quiz_test_user')").run();
     db.prepare("DELETE FROM users WHERE username = 'quiz_test_user'").run();
-    db.prepare("INSERT INTO users (username, password_hash, role) VALUES (?, ?, ?)").run('quiz_test_user', 'hash', 'user');
+    const hash = await bcrypt.hash('testpass', 10);
+    db.prepare("INSERT INTO users (username, password_hash, role) VALUES (?, ?, ?)").run('quiz_test_user', hash, 'user');
     userId = db.prepare("SELECT id FROM users WHERE username = 'quiz_test_user'").get().id;
+    await agent.post('/api/auth/login').send({ username: 'quiz_test_user', password: 'testpass' });
   });
 
   it('GET /api/quiz/today returns 401 without auth', async () => {
