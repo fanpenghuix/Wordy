@@ -2,6 +2,7 @@ function quizApp() {
   return {
     view: 'login',
     currentUser: null,
+    showUserMenu: false,
     adminTab: 'voice',
     statsTab: 'word',
 
@@ -203,6 +204,7 @@ function quizApp() {
         await fetch('/api/auth/logout', { method: 'POST' });
       } catch (e) { /* ignore */ }
       this.currentUser = null;
+      this.showUserMenu = false;
       this.quizWords = [];
       this.allWords = [];
       // Restore remembered credentials

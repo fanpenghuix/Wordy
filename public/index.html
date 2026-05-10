@@ -51,15 +51,30 @@
     <header>
       <span class="progress" x-show="quizWords.length > 0" x-text="`进度 ${currentIndex + 1}/${quizWords.length}`"></span>
       <div class="header-actions">
-        <span class="user-badge" x-show="currentUser" x-text="currentUser?.username"></span>
-        <button class="btn-logout" @click="logout()" title="退出登录">退出</button>
-        <button class="admin-toggle" @click="navigate('/admin')" title="后台管理">🔧</button>
+        <div class="user-menu" x-show="currentUser">
+          <button class="user-menu-trigger" @click="showUserMenu = !showUserMenu" @click.outside="showUserMenu = false">
+            <span class="user-avatar"></span>
+            <span x-text="currentUser?.username"></span>
+            <svg class="user-menu-chevron" viewBox="0 0 24 24" width="14" height="14" fill="currentColor" :class="{ open: showUserMenu }">
+              <path d="M7 10l5 5 5-5z"/>
+            </svg>
+          </button>
+          <div class="user-menu-dropdown" x-show="showUserMenu" x-cloak x-transition>
+            <button class="dropdown-item" @click="navigate('/admin'); showUserMenu = false">
+              <span>🔧</span> 后台管理
+            </button>
+            <hr class="dropdown-divider">
+            <button class="dropdown-item" @click="logout()">
+              <span>🚪</span> 退出登录
+            </button>
+          </div>
+        </div>
       </div>
     </header>
 
     <div class="empty-state" x-show="quizWords.length === 0 && !loading">
       <p>还没有单词哦！</p>
-      <p class="hint">点击左上角 🔧 进入后台添加单词 →</p>
+      <p class="hint">点击左上角头像进入后台添加单词 →</p>
     </div>
 
     <div class="loading" x-show="loading">
