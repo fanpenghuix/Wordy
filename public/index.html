@@ -261,18 +261,18 @@
           <div class="sm2-overview" x-show="sm2Overview">
             <div class="sm2-stat">
               <span class="sm2-label">总词数</span>
-              <span class="sm2-value" x-text="sm2Overview.total"></span>
+              <span class="sm2-value" x-text="sm2Overview?.total || 0"></span>
             </div>
             <div class="sm2-stat">
               <span class="sm2-label">今日到期</span>
-              <span class="sm2-value" x-text="sm2Overview.dueToday"></span>
+              <span class="sm2-value" x-text="sm2Overview?.dueToday || 0"></span>
             </div>
             <div class="sm2-stat">
               <span class="sm2-label">平均难度系数</span>
-              <span class="sm2-value" x-text="sm2Overview.avgEfactor"></span>
+              <span class="sm2-value" x-text="sm2Overview?.avgEfactor || 0"></span>
             </div>
             <div class="sm2-stages">
-              <template x-for="stage in sm2Overview.stageDist" :key="stage.stage">
+              <template x-for="stage in sm2Overview?.stageDist || []" :key="stage.stage">
                 <div class="sm2-stage-item">
                   <span x-text="stage.stage"></span>
                   <span class="sm2-stage-count" x-text="stage.count"></span>
