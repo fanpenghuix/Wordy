@@ -25,6 +25,7 @@ function quizApp() {
     quizComplete: false,
     showNext: false,
     showFeedback: false,
+    _quizInitialized: false,
 
     // Word management
     allWords: [],
@@ -95,7 +96,7 @@ function quizApp() {
       this.view = route.view;
       if (route.adminTab) this.adminTab = route.adminTab;
       // Load data for the target view (deduplicated)
-      if (route.view === 'quiz' && this.currentUser && this.quizWords.length === 0 && !this.loading) {
+      if (route.view === 'quiz' && this.currentUser && !this._quizInitialized) {
         this.startQuiz();
       }
       if (route.view === 'admin') {
@@ -143,12 +144,6 @@ function quizApp() {
         if (res.ok) {
           const data = await res.json();
           this.currentUser = data.user;
-          await this.loadVoices();
-          if (this.speakVoiceName) {
-            const voices = this.getVoicesForGender(this.speakGender);
-            const found = voices.find(v => v.name === this.speakVoiceName);
-            if (!found) this.speakVoiceName = voices.length > 0 ? voices[0].name : '';
-          }
           await this.startQuiz();
           const hash = this.getRouteHash();
           if (hash === '/login') {
@@ -193,7 +188,6 @@ function quizApp() {
           this.currentUser = data.user;
           this.loginUsername = '';
           this.loginPassword = '';
-          await this.loadVoices();
           await this.startQuiz();
           this.navigate('/');
         } else {
@@ -212,6 +206,7 @@ function quizApp() {
       this.currentUser = null;
       this.showUserMenu = false;
       this.quizWords = [];
+      this._quizInitialized = false;
       this.allWords = [];
       // Restore remembered credentials
       const saved = localStorage.getItem('loginUsername');
@@ -276,6 +271,7 @@ function quizApp() {
         console.error('Failed to load quiz:', e);
       }
       this.loading = false;
+      this._quizInitialized = true;
     },
 
     reveal() {
