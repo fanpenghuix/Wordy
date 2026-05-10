@@ -7,6 +7,7 @@ import quizRouter from './api/quiz.js';
 import statsRouter from './api/stats.js';
 import speakRouter from './api/speak.js';
 import authRouter from './api/auth.js';
+import usersRouter from './api/users.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const app = express();
@@ -22,6 +23,7 @@ app.use(session({
 app.use(express.static(path.join(__dirname, '..', 'public')));
 
 app.use('/api/auth', authRouter);
+app.use('/api/users', usersRouter);
 app.use('/api/words', wordsRouter);
 app.use('/api/quiz', quizRouter);
 app.use('/api/stats', statsRouter);
