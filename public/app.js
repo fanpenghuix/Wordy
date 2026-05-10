@@ -156,6 +156,10 @@ function quizApp() {
         if (res.ok) {
           const data = await res.json();
           this.currentUser = data.user;
+          if (!this._voiceLoaded) {
+            this._voiceLoaded = true;
+            await this.loadVoices();
+          }
           await this.startQuiz();
           const hash = this.getRouteHash();
           if (hash === '/login') {
@@ -200,6 +204,10 @@ function quizApp() {
           this.currentUser = data.user;
           this.loginUsername = '';
           this.loginPassword = '';
+          if (!this._voiceLoaded) {
+            this._voiceLoaded = true;
+            await this.loadVoices();
+          }
           await this.startQuiz();
           this.navigate('/');
         } else {
