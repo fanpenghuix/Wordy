@@ -1,6 +1,7 @@
 import express from 'express';
 import db from '../db.js';
 import { requireAuth } from '../middleware/auth.js';
+import { getSm2Stats, getSm2WordStats } from '../algorithms/sm2.js';
 
 const router = express.Router();
 router.use(requireAuth);
@@ -97,6 +98,18 @@ router.get('/worst', (req, res) => {
   `).all(req.userId, req.userId, limit);
 
   res.json(rows);
+});
+
+// GET /api/stats/sm2 — SM-2 overview stats
+router.get('/sm2', (req, res) => {
+  const stats = getSm2Stats(req.userId);
+  res.json(stats);
+});
+
+// GET /api/stats/sm2/words — per-word SM-2 state
+router.get('/sm2/words', (req, res) => {
+  const words = getSm2WordStats(req.userId);
+  res.json(words);
 });
 
 export default router;
