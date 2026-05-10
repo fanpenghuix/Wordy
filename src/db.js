@@ -63,7 +63,7 @@ if (wordsColumns.length === 0) {
 // Migration: create default admin user and migrate existing data
 const adminExists = db.prepare('SELECT COUNT(*) as count FROM users').get().count > 0;
 if (!adminExists) {
-  const hash = bcrypt.hashSync('Admin123456', 10);
+  const hash = bcrypt.hashSync('Admin123456.', 10);
   db.prepare('INSERT INTO users (username, password_hash, role) VALUES (?, ?, ?)').run('admin', hash, 'admin');
 }
 
