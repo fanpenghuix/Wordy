@@ -97,6 +97,8 @@ function quizApp() {
       if (route.view === 'admin') {
         if (this.adminTab === 'voice' && this.speakVoices.length === 0) this.loadVoices();
         if (this.adminTab === 'words' && this.allWords.length === 0) this.fetchWords();
+        if (this.adminTab === 'stats') this.setStatsTab(this.statsTab);
+        if (this.adminTab === 'users' && this.users.length === 0) this.fetchUsers();
       }
       // Prevent redundant history push on init
       if (oldView !== 'login' || hash !== this.getRouteHash()) {
@@ -455,7 +457,6 @@ function quizApp() {
 
     setStatsTab(tab) {
       this.statsTab = tab;
-      this.pushHash('/admin/stats');
       if (tab === 'word') this.loadAllWordStats();
       if (tab === 'daily' && this.dailyStats.length === 0) this.loadDailyStats();
       if (tab === 'trend' && this.trendData.length === 0) this.loadTrendData();
