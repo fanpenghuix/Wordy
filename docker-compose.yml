@@ -2,10 +2,11 @@ services:
   word-quiz:
     build: .
     ports:
-      - "3000:3000"
+      - "8900:3000"
     volumes:
-      - word-data:/app/data
+      - ./data:/app/data
+      - ./google-credentials.json:/app/google-credentials.json:ro
+    environment:
+      - GOOGLE_APPLICATION_CREDENTIALS=/app/google-credentials.json
+      - SESSION_SECRET=${SESSION_SECRET:-word-quiz-secret-change-in-production}
     restart: unless-stopped
-
-volumes:
-  word-data:
