@@ -62,6 +62,7 @@ function quizApp() {
     speakVoiceName: localStorage.getItem('speakVoiceName') || '',
     speakVoices: [],
     currentAudio: null,
+    _voiceLoaded: false,
 
     // Pending voice settings (unsaved changes)
     pendingGender: null,
@@ -91,7 +92,7 @@ function quizApp() {
       return '/';
     },
 
-    applyRoute(hash) {
+    async applyRoute(hash) {
       const route = this.routeMap[hash] || { view: 'quiz' };
       this.view = route.view;
       if (route.adminTab) this.adminTab = route.adminTab;
@@ -100,7 +101,13 @@ function quizApp() {
         this.startQuiz();
       }
       if (route.view === 'admin') {
-        if (this.adminTab === 'voice' && this.speakVoices.length === 0) this.loadVoices();
+        if (this.adminTab === 'voice') {
+          if (!this._voiceLoaded) {
+            this._voiceLoaded = true;
+            await this.loadVoices();
+          }
+          this.loadVoiceSettings();
+        }
         if (this.adminTab === 'words' && this.allWords.length === 0) this.fetchWords();
         if (this.adminTab === 'stats') this.setStatsTab(this.statsTab);
         if (this.adminTab === 'users' && this.users.length === 0) this.fetchUsers();
@@ -125,7 +132,7 @@ function quizApp() {
       if (location.hash !== target) {
         history.pushState(null, '', target);
       }
-      this.handleHashChange();
+      this.applyRoute(hash);
     },
 
     async init() {
