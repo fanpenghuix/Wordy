@@ -67,6 +67,9 @@ function quizApp() {
     pendingSpeed: 0.85,
     pendingVoiceName: '',
 
+    // Auth gate: hash changes ignored until /me resolves
+    authReady: false,
+
     // ===== Hash Routing =====
 
     routeMap: {
@@ -89,9 +92,9 @@ function quizApp() {
 
     applyRoute(hash) {
       const route = this.routeMap[hash] || { view: 'quiz' };
-      const oldView = this.view;
       this.view = route.view;
       if (route.adminTab) this.adminTab = route.adminTab;
+      // Load data for the target view (deduplicated)
       if (route.view === 'quiz' && this.currentUser && this.quizWords.length === 0 && !this.loading) {
         this.startQuiz();
       }
@@ -101,13 +104,7 @@ function quizApp() {
         if (this.adminTab === 'stats') this.setStatsTab(this.statsTab);
         if (this.adminTab === 'users' && this.users.length === 0) this.fetchUsers();
       }
-      // Prevent redundant history push on init
-      if (oldView !== 'login' || hash !== this.getRouteHash()) {
-        this.pushHash(hash);
-      }
-    },
-
-    pushHash(hash) {
+      // Update URL without triggering hashchange
       const target = hash.startsWith('#') ? hash : '#' + hash;
       if (location.hash !== target) {
         history.replaceState(null, '', target);
@@ -115,6 +112,7 @@ function quizApp() {
     },
 
     handleHashChange() {
+      if (!this.authReady) return;
       const hash = this.getRouteHash();
       if (this.currentUser || hash === '/login') {
         this.applyRoute(hash);
@@ -122,7 +120,10 @@ function quizApp() {
     },
 
     navigate(hash) {
-      this.pushHash(hash);
+      const target = hash.startsWith('#') ? hash : '#' + hash;
+      if (location.hash !== target) {
+        history.pushState(null, '', target);
+      }
       this.handleHashChange();
     },
 
@@ -155,15 +156,20 @@ function quizApp() {
           } else {
             this.applyRoute(hash);
           }
+          this.authReady = true;
           return;
         }
       } catch (e) { /* not logged in */ }
+
+      // Not logged in — show login or handle redirect
       const hash = this.getRouteHash();
       if (hash === '/login' || hash === '/' || hash === '') {
         this.applyRoute('/login');
       } else {
-        this.applyRoute(hash);
+        // Redirect to login but preserve original hash
+        this.applyRoute('/login');
       }
+      this.authReady = true;
     },
 
     async login() {
