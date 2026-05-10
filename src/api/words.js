@@ -17,7 +17,7 @@ router.post('/', (req, res) => {
   }
 
   try {
-    const result = db.prepare('INSERT INTO words (english, chinese) VALUES (?, ?)').run(english.trim(), chinese.trim());
+    const result = db.prepare('INSERT INTO words (english, chinese, user_id) VALUES (?, ?, ?)').run(english.trim(), chinese.trim(), 1);
     const word = db.prepare('SELECT * FROM words WHERE id = ?').get(result.lastInsertRowid);
     res.status(201).json(word);
   } catch (err) {
@@ -48,7 +48,10 @@ router.put('/:id', (req, res) => {
 
 // DELETE /api/words/:id — delete a word
 router.delete('/:id', (req, res) => {
-  const result = db.prepare('DELETE FROM words WHERE id = ?').run(Number(req.params.id));
+  const id = Number(req.params.id);
+  // Delete quiz records first to avoid FK constraint failure
+  db.prepare('DELETE FROM quiz_records WHERE word_id = ?').run(id);
+  const result = db.prepare('DELETE FROM words WHERE id = ?').run(id);
 
   if (result.changes === 0) {
     return res.status(404).json({ error: 'Word not found' });

@@ -2,13 +2,19 @@ import { describe, it, expect, beforeEach, afterAll } from 'vitest';
 import fs from 'fs';
 import path from 'path';
 
-const testDbDir = path.join(process.cwd(), 'data-test');
+const testDbDir = path.join(process.cwd(), 'data-test-vitest');
 process.env.DB_DIR = testDbDir;
 
 // Import db module after setting env
 const { default: db } = await import('../src/db.js');
 
 describe('Database', () => {
+  beforeEach(() => {
+    db.exec('DELETE FROM quiz_records');
+    db.exec('DELETE FROM words');
+    db.exec("DELETE FROM sqlite_sequence WHERE name IN ('words', 'quiz_records')");
+  });
+
   it('should have words table', () => {
     const tables = db.prepare("SELECT name FROM sqlite_master WHERE type='table'").all();
     const tableNames = tables.map(t => t.name);

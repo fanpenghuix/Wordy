@@ -1,9 +1,8 @@
-import { describe, it, expect, beforeEach, afterAll } from 'vitest';
-import fs from 'fs';
+import { describe, it, expect, beforeEach } from 'vitest';
 import path from 'path';
 import express from 'express';
 
-const testDbDir = path.join(process.cwd(), 'data-test-stats');
+const testDbDir = path.join(process.cwd(), 'data-test-vitest');
 process.env.DB_DIR = testDbDir;
 
 const { default: db } = await import('../src/db.js');
@@ -15,8 +14,8 @@ testApp.use(express.json());
 testApp.use('/api/stats', statsRouter);
 
 function addWord(english, chinese, date) {
-  return db.prepare('INSERT INTO words (english, chinese, created_at) VALUES (?, ?, ?)')
-    .run(english, chinese, date || '2026-05-01');
+  return db.prepare('INSERT INTO words (english, chinese, created_at, user_id) VALUES (?, ?, ?, ?)')
+    .run(english, chinese, date || '2026-05-01', 1);
 }
 
 function addRecord(wordId, correct, date) {
@@ -28,12 +27,7 @@ describe('Stats API', () => {
   beforeEach(() => {
     db.exec('DELETE FROM quiz_records');
     db.exec('DELETE FROM words');
-    db.exec("DELETE FROM sqlite_sequence WHERE name='words'");
-  });
-
-  afterAll(() => {
-    db.close();
-    fs.rmSync(testDbDir, { recursive: true, force: true });
+    db.exec("DELETE FROM sqlite_sequence WHERE name IN ('words', 'quiz_records')");
   });
 
   describe('GET /api/stats/word/:id', () => {

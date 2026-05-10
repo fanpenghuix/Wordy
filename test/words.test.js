@@ -1,9 +1,8 @@
-import { describe, it, expect, beforeEach, afterAll } from 'vitest';
-import fs from 'fs';
+import { describe, it, expect, beforeEach } from 'vitest';
 import path from 'path';
 import express from 'express';
 
-const testDbDir = path.join(process.cwd(), 'data-test-words');
+const testDbDir = path.join(process.cwd(), 'data-test-vitest');
 process.env.DB_DIR = testDbDir;
 
 const { default: db } = await import('../src/db.js');
@@ -18,12 +17,7 @@ describe('Words API', () => {
   beforeEach(() => {
     db.exec('DELETE FROM quiz_records');
     db.exec('DELETE FROM words');
-    db.exec("DELETE FROM sqlite_sequence WHERE name='words'");
-  });
-
-  afterAll(() => {
-    db.close();
-    fs.rmSync(testDbDir, { recursive: true, force: true });
+    db.exec("DELETE FROM sqlite_sequence WHERE name IN ('words', 'quiz_records')");
   });
 
   describe('POST /api/words', () => {
@@ -56,8 +50,8 @@ describe('Words API', () => {
 
   describe('GET /api/words', () => {
     it('should return all words', async () => {
-      db.prepare("INSERT INTO words (english, chinese, created_at) VALUES (?, ?, ?)").run('cat', '猫', '2026-05-09');
-      db.prepare("INSERT INTO words (english, chinese, created_at) VALUES (?, ?, ?)").run('dog', '狗', '2026-05-09');
+      db.prepare("INSERT INTO words (english, chinese, created_at, user_id) VALUES (?, ?, ?, ?)").run('cat', '猫', '2026-05-09', 1);
+      db.prepare("INSERT INTO words (english, chinese, created_at, user_id) VALUES (?, ?, ?, ?)").run('dog', '狗', '2026-05-09', 1);
 
       const res = await request(testApp).get('/api/words');
       expect(res.status).toBe(200);
@@ -73,7 +67,7 @@ describe('Words API', () => {
 
   describe('PUT /api/words/:id', () => {
     it('should update a word', async () => {
-      const insert = db.prepare("INSERT INTO words (english, chinese, created_at) VALUES (?, ?, ?)").run('cat', '猫', '2026-05-09');
+      const insert = db.prepare("INSERT INTO words (english, chinese, created_at, user_id) VALUES (?, ?, ?, 1)").run('cat', '猫', '2026-05-09');
       const res = await request(testApp)
         .put(`/api/words/${insert.lastInsertRowid}`)
         .send({ english: 'kitten', chinese: '小猫' });
@@ -93,7 +87,7 @@ describe('Words API', () => {
 
   describe('DELETE /api/words/:id', () => {
     it('should delete a word', async () => {
-      const insert = db.prepare("INSERT INTO words (english, chinese, created_at) VALUES (?, ?, ?)").run('cat', '猫', '2026-05-09');
+      const insert = db.prepare("INSERT INTO words (english, chinese, created_at, user_id) VALUES (?, ?, ?, 1)").run('cat', '猫', '2026-05-09');
       const res = await request(testApp).delete(`/api/words/${insert.lastInsertRowid}`);
       expect(res.status).toBe(200);
 
