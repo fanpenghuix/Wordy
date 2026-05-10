@@ -24,10 +24,8 @@ db.exec(`
   );
 `);
 
-// Check if words table exists and has user_id
+// Check if words table exists and whether migration is needed
 const wordsColumns = db.pragma('table_info(words)');
-const hasUserId = wordsColumns.some(c => c.name === 'user_id');
-const hasUniqueEnglish = wordsColumns.some(c => c.name === 'english' && c.notnull === 1);
 
 if (wordsColumns.length === 0) {
   // Fresh database: create tables with user_id from the start
@@ -40,7 +38,7 @@ if (wordsColumns.length === 0) {
       created_at TEXT NOT NULL DEFAULT (date('now'))
     );
 
-    CREATE TABLE quiz_records (
+    CREATE TABLE IF NOT EXISTS quiz_records (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       user_id INTEGER REFERENCES users(id),
       word_id INTEGER NOT NULL REFERENCES words(id),
@@ -49,21 +47,12 @@ if (wordsColumns.length === 0) {
     );
   `);
 } else {
-  // Existing database: rebuild words table to remove UNIQUE on english and add user_id
-  db.exec(`
-    CREATE TABLE words_new (
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
-      user_id INTEGER REFERENCES users(id),
-      english TEXT NOT NULL,
-      chinese TEXT NOT NULL,
-      created_at TEXT NOT NULL DEFAULT (date('now'))
-    );
-    INSERT INTO words_new (id, english, chinese, created_at) SELECT id, english, chinese, created_at FROM words;
-    DROP TABLE words;
-    ALTER TABLE words_new RENAME TO words;
-  `);
+  // Existing database: add user_id if missing
+  const hasUserId = wordsColumns.some(c => c.name === 'user_id');
+  if (!hasUserId) {
+    db.exec('ALTER TABLE words ADD COLUMN user_id INTEGER REFERENCES users(id)');
+  }
 
-  // Add user_id to quiz_records if not exists
   const quizColumns = db.pragma('table_info(quiz_records)').map(c => c.name);
   if (!quizColumns.includes('user_id')) {
     db.exec('ALTER TABLE quiz_records ADD COLUMN user_id INTEGER REFERENCES users(id)');
@@ -72,18 +61,20 @@ if (wordsColumns.length === 0) {
 
 // Migration: create default admin user and migrate existing data
 const bcrypt = await import('bcrypt');
-const hash = bcrypt.hashSync('Admin123456', 10);
-db.prepare('INSERT OR IGNORE INTO users (username, password_hash, role) VALUES (?, ?, ?)').run('admin', hash, 'admin');
+const adminExists = db.prepare('SELECT COUNT(*) as count FROM users').get().count > 0;
+if (!adminExists) {
+  const hash = bcrypt.hashSync('Admin123456', 10);
+  db.prepare('INSERT INTO users (username, password_hash, role) VALUES (?, ?, ?)').run('admin', hash, 'admin');
+}
 
-// Always migrate NULL user_id data to admin
+// Migrate NULL user_id data to admin
 const admin = db.prepare('SELECT id FROM users WHERE username = ?').get('admin');
 if (admin) {
   db.prepare('UPDATE words SET user_id = ? WHERE user_id IS NULL').run(admin.id);
   db.prepare('UPDATE quiz_records SET user_id = ? WHERE user_id IS NULL').run(admin.id);
 }
 
-// Per-user uniqueness of english words
-db.exec(`DROP INDEX IF EXISTS idx_words_user_english`);
-db.exec(`CREATE UNIQUE INDEX idx_words_user_english ON words(user_id, english)`);
+// Per-user uniqueness of english words (idempotent)
+db.exec(`CREATE UNIQUE INDEX IF NOT EXISTS idx_words_user_english ON words(user_id, english)`);
 
 export default db;
