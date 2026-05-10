@@ -1,6 +1,7 @@
 import Database from 'better-sqlite3';
 import path from 'path';
 import fs from 'fs';
+import bcrypt from 'bcrypt';
 
 const dbDir = process.env.DB_DIR || path.join(process.cwd(), 'data');
 const dbPath = path.join(dbDir, 'words.db');
@@ -60,7 +61,6 @@ if (wordsColumns.length === 0) {
 }
 
 // Migration: create default admin user and migrate existing data
-const bcrypt = await import('bcrypt');
 const adminExists = db.prepare('SELECT COUNT(*) as count FROM users').get().count > 0;
 if (!adminExists) {
   const hash = bcrypt.hashSync('Admin123456', 10);
