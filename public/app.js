@@ -203,6 +203,17 @@ function quizApp() {
       this.currentUser = null;
       this.quizWords = [];
       this.allWords = [];
+      // Restore remembered credentials
+      const saved = localStorage.getItem('loginUsername');
+      if (saved) {
+        this.loginUsername = saved;
+        this.loginPassword = localStorage.getItem('loginPassword') || '';
+        this.rememberMe = true;
+      } else {
+        this.loginUsername = '';
+        this.loginPassword = '';
+        this.rememberMe = false;
+      }
       this.navigate('/login');
     },
 
