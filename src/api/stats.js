@@ -1,20 +1,22 @@
 import express from 'express';
 import db from '../db.js';
+import { requireAuth } from '../middleware/auth.js';
 
 const router = express.Router();
+router.use(requireAuth);
 
 // GET /api/stats/word/:id — per-word accuracy
 router.get('/word/:id', (req, res) => {
   const wordId = Number(req.params.id);
-  const word = db.prepare('SELECT * FROM words WHERE id = ?').get(wordId);
+  const word = db.prepare('SELECT * FROM words WHERE id = ? AND user_id = ?').get(wordId, req.userId);
   if (!word) {
     return res.status(404).json({ error: 'Word not found' });
   }
 
   const stats = db.prepare(`
     SELECT COUNT(*) as total, SUM(correct) as correct
-    FROM quiz_records WHERE word_id = ?
-  `).get(wordId);
+    FROM quiz_records WHERE word_id = ? AND user_id = ?
+  `).get(wordId, req.userId);
 
   const total = stats.total || 0;
   const correct = stats.correct || 0;
@@ -32,9 +34,10 @@ router.get('/daily', (req, res) => {
       SUM(correct) as correct,
       ROUND(CAST(SUM(correct) AS FLOAT) / COUNT(*), 3) as accuracy
     FROM quiz_records
+    WHERE user_id = ?
     GROUP BY quiz_date
     ORDER BY quiz_date DESC
-  `).all();
+  `).all(req.userId);
 
   res.json(rows);
 });
@@ -52,6 +55,7 @@ router.get('/trend', (req, res) => {
         SUM(correct) as correct,
         ROUND(CAST(SUM(correct) AS FLOAT) / COUNT(*), 3) as accuracy
       FROM quiz_records
+      WHERE user_id = ?
       GROUP BY strftime('%Y-%m', quiz_date)
       ORDER BY label
     `;
@@ -64,12 +68,13 @@ router.get('/trend', (req, res) => {
         SUM(correct) as correct,
         ROUND(CAST(SUM(correct) AS FLOAT) / COUNT(*), 3) as accuracy
       FROM quiz_records
+      WHERE user_id = ?
       GROUP BY strftime('%Y-%W', quiz_date)
       ORDER BY label
     `;
   }
 
-  const rows = db.prepare(query).all();
+  const rows = db.prepare(query).all(req.userId);
   res.json(rows);
 });
 
@@ -85,10 +90,11 @@ router.get('/worst', (req, res) => {
       ROUND(CAST(SUM(r.correct) AS FLOAT) / COUNT(*), 3) as accuracy
     FROM words w
     JOIN quiz_records r ON w.id = r.word_id
+    WHERE w.user_id = ? AND r.user_id = ?
     GROUP BY w.id
     ORDER BY accuracy ASC, total DESC
     LIMIT ?
-  `).all(limit);
+  `).all(req.userId, req.userId, limit);
 
   res.json(rows);
 });

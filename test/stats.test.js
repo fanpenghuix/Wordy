@@ -1,17 +1,34 @@
-import { describe, it, expect, beforeEach } from 'vitest';
+import { describe, it, expect, beforeAll, beforeEach } from 'vitest';
 import path from 'path';
 import express from 'express';
+import session from 'express-session';
 
-const testDbDir = path.join(process.cwd(), 'data-test-vitest');
-process.env.DB_DIR = testDbDir;
+const testDbDir = process.env.DB_DIR;
 
 const { default: db } = await import('../src/db.js');
 import statsRouter from '../src/api/stats.js';
 import request from 'supertest';
 
-const testApp = express();
-testApp.use(express.json());
-testApp.use('/api/stats', statsRouter);
+function createTestApp(userId = 1) {
+  const app = express();
+  app.use(express.json());
+  app.use(session({
+    secret: 'test-secret',
+    resave: false,
+    saveUninitialized: false,
+    store: new session.MemoryStore(),
+  }));
+  app.use((req, res, next) => {
+    req.session.userId = userId;
+    req.session.username = 'testuser';
+    req.session.role = 'user';
+    next();
+  });
+  app.use('/api/stats', statsRouter);
+  return app;
+}
+
+const testApp = createTestApp(1);
 
 function addWord(english, chinese, date) {
   return db.prepare('INSERT INTO words (english, chinese, created_at, user_id) VALUES (?, ?, ?, ?)')
@@ -19,11 +36,15 @@ function addWord(english, chinese, date) {
 }
 
 function addRecord(wordId, correct, date) {
-  return db.prepare('INSERT INTO quiz_records (word_id, correct, quiz_date) VALUES (?, ?, ?)')
-    .run(wordId, correct, date || '2026-05-01');
+  return db.prepare('INSERT INTO quiz_records (word_id, correct, quiz_date, user_id) VALUES (?, ?, ?, ?)')
+    .run(wordId, correct, date || '2026-05-01', 1);
 }
 
 describe('Stats API', () => {
+  beforeAll(() => {
+    db.exec(`INSERT OR IGNORE INTO users (id, username, password_hash, role) VALUES (1, 'testuser', 'dummy', 'user')`);
+  });
+
   beforeEach(() => {
     db.exec('DELETE FROM quiz_records');
     db.exec('DELETE FROM words');

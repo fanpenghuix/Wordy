@@ -1,19 +1,41 @@
-import { describe, it, expect, beforeEach } from 'vitest';
+import { describe, it, expect, beforeAll, beforeEach } from 'vitest';
 import path from 'path';
 import express from 'express';
+import session from 'express-session';
 
-const testDbDir = path.join(process.cwd(), 'data-test-vitest');
-process.env.DB_DIR = testDbDir;
+const testDbDir = process.env.DB_DIR;
 
 const { default: db } = await import('../src/db.js');
 import request from 'supertest';
 import wordsRouter from '../src/api/words.js';
 
-const testApp = express();
-testApp.use(express.json());
-testApp.use('/api/words', wordsRouter);
+function createTestApp(userId = 1) {
+  const app = express();
+  app.use(express.json());
+  app.use(session({
+    secret: 'test-secret',
+    resave: false,
+    saveUninitialized: false,
+    store: new session.MemoryStore(),
+  }));
+  app.use((req, res, next) => {
+    req.session.userId = userId;
+    req.session.username = 'testuser';
+    req.session.role = 'user';
+    next();
+  });
+  app.use('/api/words', wordsRouter);
+  return app;
+}
+
+const testApp = createTestApp(1);
 
 describe('Words API', () => {
+  beforeAll(() => {
+    // Ensure test user exists
+    db.exec(`INSERT OR IGNORE INTO users (id, username, password_hash, role) VALUES (1, 'testuser', 'dummy', 'user')`);
+  });
+
   beforeEach(() => {
     db.exec('DELETE FROM quiz_records');
     db.exec('DELETE FROM words');
@@ -67,7 +89,7 @@ describe('Words API', () => {
 
   describe('PUT /api/words/:id', () => {
     it('should update a word', async () => {
-      const insert = db.prepare("INSERT INTO words (english, chinese, created_at, user_id) VALUES (?, ?, ?, 1)").run('cat', '猫', '2026-05-09');
+      const insert = db.prepare("INSERT INTO words (english, chinese, created_at, user_id) VALUES (?, ?, ?, ?)").run('cat', '猫', '2026-05-09', 1);
       const res = await request(testApp)
         .put(`/api/words/${insert.lastInsertRowid}`)
         .send({ english: 'kitten', chinese: '小猫' });
@@ -87,7 +109,7 @@ describe('Words API', () => {
 
   describe('DELETE /api/words/:id', () => {
     it('should delete a word', async () => {
-      const insert = db.prepare("INSERT INTO words (english, chinese, created_at, user_id) VALUES (?, ?, ?, 1)").run('cat', '猫', '2026-05-09');
+      const insert = db.prepare("INSERT INTO words (english, chinese, created_at, user_id) VALUES (?, ?, ?, ?)").run('cat', '猫', '2026-05-09', 1);
       const res = await request(testApp).delete(`/api/words/${insert.lastInsertRowid}`);
       expect(res.status).toBe(200);
 
