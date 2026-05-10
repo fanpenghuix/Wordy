@@ -9,6 +9,8 @@ import speakRouter from './api/speak.js';
 import authRouter from './api/auth.js';
 import usersRouter from './api/users.js';
 
+process.env.ACTIVE_STRATEGY = process.env.ACTIVE_STRATEGY || 'sm2';
+
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const app = express();
 const PORT = process.env.PORT || 3000;

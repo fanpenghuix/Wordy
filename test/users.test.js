@@ -43,6 +43,7 @@ describe('Users API', () => {
 
   beforeEach(() => {
     db.exec('DELETE FROM quiz_records');
+    db.exec('DELETE FROM sm2_reviews');
     db.exec('DELETE FROM words');
     db.exec('DELETE FROM users');
     db.exec("DELETE FROM sqlite_sequence WHERE name='words'");

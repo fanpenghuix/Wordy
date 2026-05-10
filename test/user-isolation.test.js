@@ -50,9 +50,10 @@ describe('User Data Isolation', () => {
   beforeAll(async () => {
     // Clean up any leftover test data
     db.exec('DELETE FROM quiz_records');
+    db.exec('DELETE FROM sm2_reviews');
     db.exec('DELETE FROM words');
     db.exec("DELETE FROM users WHERE username IN ('alice', 'bob')");
-    db.exec("DELETE FROM sqlite_sequence WHERE name IN ('words', 'users')");
+    db.exec("DELETE FROM sqlite_sequence WHERE name IN ('words', 'users', 'sm2_reviews')");
 
     userAId = await createUser('alice', 'user');
     userBId = await createUser('bob', 'user');
@@ -63,6 +64,7 @@ describe('User Data Isolation', () => {
 
   beforeEach(() => {
     db.exec('DELETE FROM quiz_records');
+    db.exec('DELETE FROM sm2_reviews');
     db.exec('DELETE FROM words');
     db.exec("DELETE FROM sqlite_sequence WHERE name='words'");
   });

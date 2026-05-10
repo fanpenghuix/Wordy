@@ -1,5 +1,4 @@
 import db from '../db.js';
-import { registerStrategy } from './quizStrategy.js';
 
 const today = () => new Date().toISOString().slice(0, 10);
 
@@ -79,24 +78,6 @@ function getDueWords(userId, limit) {
 function getTotalWordCount(userId) {
   return db.prepare('SELECT COUNT(*) as count FROM words WHERE user_id = ?').get(userId).count;
 }
-
-const legacyStrategy = {
-  getDueWords(userId, limit) {
-    const t = today();
-    const words = db.prepare('SELECT * FROM words WHERE user_id = ?').all(userId);
-    const newWords = words.filter(w => w.created_at === t);
-    const otherWords = words.filter(w => w.created_at !== t);
-    const count = limit || Math.ceil(otherWords.length * 0.15);
-    const shuffled = otherWords.sort(() => Math.random() - 0.5);
-    return [...newWords, ...shuffled.slice(0, count)].sort(() => Math.random() - 0.5);
-  },
-  recordResult() {},
-  initWord() {},
-};
-registerStrategy('legacy', legacyStrategy);
-
-const sm2Strategy = { getDueWords, recordResult, initWord: initSm2Review };
-registerStrategy('sm2', sm2Strategy);
 
 export { getDueWords as getSm2DueWords };
 

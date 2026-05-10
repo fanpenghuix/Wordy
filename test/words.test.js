@@ -38,8 +38,9 @@ describe('Words API', () => {
 
   beforeEach(() => {
     db.exec('DELETE FROM quiz_records');
+    db.exec('DELETE FROM sm2_reviews');
     db.exec('DELETE FROM words');
-    db.exec("DELETE FROM sqlite_sequence WHERE name IN ('words', 'quiz_records')");
+    db.exec("DELETE FROM sqlite_sequence WHERE name IN ('words', 'quiz_records', 'sm2_reviews')");
   });
 
   describe('POST /api/words', () => {

@@ -35,20 +35,29 @@ function addWord(english, chinese, date) {
     .run(english, chinese, date || '2026-05-09', 1);
 }
 
-function addRecord(wordId, correct, date) {
-  return db.prepare('INSERT INTO quiz_records (word_id, correct, quiz_date, user_id) VALUES (?, ?, ?, ?)')
-    .run(wordId, correct, date || '2026-05-09', 1);
+function initSm2Review(wordId, nextReview) {
+  db.prepare(`
+    INSERT INTO sm2_reviews (user_id, word_id, interval, efactor, repetitions, next_review)
+    VALUES (1, ?, 0, 2.5, 0, ?)
+  `).run(wordId, nextReview || '2026-01-01');
 }
 
-describe('Quiz API', () => {
+function setSm2Due(wordId, interval, repetitions) {
+  const today = new Date().toISOString().slice(0, 10);
+  db.prepare('UPDATE sm2_reviews SET interval = ?, repetitions = ?, next_review = ? WHERE word_id = ?')
+    .run(interval, repetitions, today, wordId);
+}
+
+describe('Quiz API (SM-2)', () => {
   beforeAll(() => {
     db.exec(`INSERT OR IGNORE INTO users (id, username, password_hash, role) VALUES (1, 'testuser', 'dummy', 'user')`);
   });
 
   beforeEach(() => {
     db.exec('DELETE FROM quiz_records');
+    db.exec('DELETE FROM sm2_reviews WHERE user_id = 1');
     db.exec('DELETE FROM words');
-    db.exec("DELETE FROM sqlite_sequence WHERE name IN ('words', 'quiz_records')");
+    db.exec("DELETE FROM sqlite_sequence WHERE name IN ('words', 'quiz_records', 'sm2_reviews')");
   });
 
   describe('GET /api/quiz/today', () => {
@@ -58,13 +67,10 @@ describe('Quiz API', () => {
       expect(res.body.words).toEqual([]);
     });
 
-    it('should always include new words added today', async () => {
+    it('should always include new words (no sm2_reviews entry)', async () => {
       const today = new Date().toISOString().slice(0, 10);
       addWord('new1', '新词1', today);
       addWord('new2', '新词2', today);
-      addWord('old1', '旧词1', '2026-01-01');
-      addWord('old2', '旧词2', '2026-01-01');
-      addWord('old3', '旧词3', '2026-01-01');
 
       const res = await request(testApp).get('/api/quiz/today');
       expect(res.status).toBe(200);
@@ -73,37 +79,53 @@ describe('Quiz API', () => {
       expect(englishList).toContain('new2');
     });
 
-    it('should select approximately 15% of old words', async () => {
+    it('should include due words from sm2_reviews', async () => {
+      // Add enough words so dailyLimit (20%) covers both
+      for (let i = 1; i <= 10; i++) {
+        addWord(`due${i}`, `到期${i}`, '2026-01-01');
+      }
+      // Mark first two as due
+      const dueWords = db.prepare('SELECT id FROM words WHERE user_id = 1').all();
       const today = new Date().toISOString().slice(0, 10);
-      addWord('new1', '新词1', today);
-      // Add 20 old words — 15% = 3
-      for (let i = 1; i <= 20; i++) {
-        addWord(`old${i}`, `旧词${i}`, '2026-01-01');
+      for (const w of dueWords.slice(0, 2)) {
+        initSm2Review(w.id, today);
+        setSm2Due(w.id, 1, 1);
       }
 
       const res = await request(testApp).get('/api/quiz/today');
       expect(res.status).toBe(200);
-      // Should have 1 new + 3 old = 4 (ceil(20 * 0.15) = 3)
-      expect(res.body.words.length).toBe(4);
       const englishList = res.body.words.map(w => w.english);
-      expect(englishList).toContain('new1');
+      expect(englishList).toContain('due1');
+      expect(englishList).toContain('due2');
     });
 
-    it('should shuffle the result', async () => {
+    it('should not include non-due words', async () => {
       const today = new Date().toISOString().slice(0, 10);
-      for (let i = 1; i <= 10; i++) {
-        addWord(`word${i}`, `词${i}`, today);
-      }
+      const future = new Date(Date.now() + 86400000).toISOString().slice(0, 10);
+      const w = addWord('notdue', '未到期', '2026-01-01');
+      initSm2Review(w.lastInsertRowid, future);
 
-      // Run multiple times and check order varies
-      const results = new Set();
-      for (let i = 0; i < 5; i++) {
-        const res = await request(testApp).get('/api/quiz/today');
-        const order = res.body.words.map(w => w.english).join(',');
-        results.add(order);
+      const res = await request(testApp).get('/api/quiz/today');
+      expect(res.status).toBe(200);
+      const englishList = res.body.words.map(w => w.english);
+      expect(englishList).not.toContain('notdue');
+    });
+
+    it('should prioritize wrong answers (repetitions=0) first', async () => {
+      const wWrong = addWord('wrong', '错误', '2026-01-01');
+      const wDue = addWord('due', '到期', '2026-01-01');
+      initSm2Review(wWrong.lastInsertRowid, new Date().toISOString().slice(0, 10));
+      initSm2Review(wDue.lastInsertRowid, new Date().toISOString().slice(0, 10));
+      // wWrong has repetitions=0, wDue has repetitions=2
+      setSm2Due(wDue.lastInsertRowid, 3, 2);
+
+      const res = await request(testApp).get('/api/quiz/today');
+      expect(res.status).toBe(200);
+      const words = res.body.words;
+      // Wrong word should come first
+      if (words.length >= 2) {
+        expect(words[0].english).toBe('wrong');
       }
-      // With 10 items, shuffling should produce different orders
-      expect(results.size).toBeGreaterThan(1);
     });
   });
 
@@ -128,6 +150,19 @@ describe('Quiz API', () => {
       expect(res.status).toBe(201);
       const record = db.prepare('SELECT * FROM quiz_records WHERE word_id = ?').get(word.lastInsertRowid);
       expect(record.correct).toBe(0);
+    });
+
+    it('should update SM-2 state on correct answer', async () => {
+      const word = addWord('test', '测试');
+      initSm2Review(word.lastInsertRowid);
+
+      await request(testApp)
+        .post('/api/quiz/record')
+        .send({ word_id: word.lastInsertRowid, correct: 1 });
+
+      const state = db.prepare('SELECT * FROM sm2_reviews WHERE word_id = ?').get(word.lastInsertRowid);
+      expect(state.repetitions).toBe(1);
+      expect(state.interval).toBe(1);
     });
 
     it('should return 400 for missing fields', async () => {

@@ -61,10 +61,15 @@ if (wordsColumns.length === 0) {
 }
 
 // Migration: create default admin user and migrate existing data
-const adminExists = db.prepare('SELECT COUNT(*) as count FROM users').get().count > 0;
-if (!adminExists) {
-  const hash = bcrypt.hashSync('Admin@123456.', 10);
-  db.prepare('INSERT INTO users (username, password_hash, role) VALUES (?, ?, ?)').run('admin', hash, 'admin');
+try {
+  const adminExists = db.prepare('SELECT COUNT(*) as count FROM users').get().count > 0;
+  if (!adminExists) {
+    const hash = bcrypt.hashSync('Admin@123456.', 10);
+    db.prepare('INSERT INTO users (username, password_hash, role) VALUES (?, ?, ?)').run('admin', hash, 'admin');
+  }
+} catch (e) {
+  if (!e.message.includes('UNIQUE constraint')) throw e;
+  // Admin already created by another process — ignore
 }
 
 // Migrate NULL user_id data to admin
