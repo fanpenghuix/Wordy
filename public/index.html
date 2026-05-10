@@ -5,23 +5,47 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
   <title>⭐ 单词抽查</title>
   <link rel="stylesheet" href="style.css">
-  <script defer src="https://cdn.jsdelivr.net/npm/alpinejs@3.x.x/dist/cdn.min.js"></script>
-  <script defer src="app.js"></script>
 </head>
 <body x-data="quizApp()" x-init="init()">
 
+  <!-- Stars container -->
   <div class="stars" id="stars"></div>
 
-  <div class="app" x-show="view === 'quiz'">
+  <!-- ==================== LOGIN VIEW ==================== -->
+  <div class="app login-view" x-show="view === 'login'" x-cloak>
+    <div class="login-card">
+      <h1 class="login-title">单词抽查</h1>
+      <p class="login-subtitle">登录后开始抽查</p>
+      <form @submit.prevent="login()">
+        <div class="login-field">
+          <input type="text" x-model="loginUsername" placeholder="用户名" autocomplete="username" required>
+        </div>
+        <div class="login-field">
+          <input type="password" x-model="loginPassword" placeholder="密码" autocomplete="current-password" required>
+        </div>
+        <p class="login-error" x-show="loginError" x-text="loginError"></p>
+        <button type="submit" class="btn-login" :disabled="loginLoading">
+          <span x-show="!loginLoading">登录</span>
+          <span x-show="loginLoading">登录中...</span>
+        </button>
+      </form>
+    </div>
+  </div>
+
+  <!-- ==================== QUIZ VIEW ==================== -->
+  <div class="app" x-show="view === 'quiz'" x-cloak>
     <header>
-      <h1>⭐ 单词抽查</h1>
       <span class="progress" x-show="quizWords.length > 0" x-text="`进度 ${currentIndex + 1}/${quizWords.length}`"></span>
-      <button class="admin-toggle" @click="showAdmin = true">⚙</button>
+      <div class="header-actions">
+        <span class="user-badge" x-show="currentUser" x-text="currentUser?.username"></span>
+        <button class="btn-logout" @click="logout()" title="退出登录">退出</button>
+        <button class="admin-toggle" @click="view = 'admin'; adminTab = 'voice'; loadVoiceSettings()" title="后台管理">🔧</button>
+      </div>
     </header>
 
     <div class="empty-state" x-show="quizWords.length === 0 && !loading">
       <p>还没有单词哦！</p>
-      <p class="hint">点击左上角 ⚙ 添加单词吧 →</p>
+      <p class="hint">点击左上角 🔧 进入后台添加单词 →</p>
     </div>
 
     <div class="loading" x-show="loading">
@@ -30,149 +54,298 @@
     </div>
 
     <div class="quiz-card" x-show="quizWords.length > 0 && currentWord && !loading">
-      <div x-show="!revealed">
-        <p class="chinese" x-text="currentWord.chinese"></p>
-        <button class="btn-reveal" @click="reveal()">🔍 点击显示答案</button>
+      <div class="quiz-word-area" x-show="!revealed" x-cloak>
+        <p class="chinese" x-text="currentWord?.chinese"></p>
+        <div class="action-buttons-inline">
+          <button class="btn-reveal" @click="reveal()">🔍 点击显示答案</button>
+          <button class="btn-skip" @click="skipWord()">⏭ 跳过</button>
+        </div>
       </div>
 
-      <div x-show="revealed && !answered">
-        <p class="english" :class="{ 'incorrect': markWrong }" x-text="currentWord.english"></p>
-        <div class="action-buttons">
+      <div class="quiz-word-area" x-show="revealed" x-cloak>
+        <div class="word-with-speak">
+          <p class="english" :class="{ 'incorrect': markWrong }" x-text="currentWord?.english"></p>
+          <button class="btn-speak" @click="speakWord()" title="英式发音朗读">
+            <svg viewBox="0 0 24 24" width="24" height="24" fill="currentColor">
+              <path d="M3 9v6h4l5 5V4L7 9H3zm13.5 3c0-1.77-1.02-3.29-2.5-4.03v8.05c1.48-.73 2.5-2.25 2.5-4.02zM14 3.23v2.06c2.89.86 5 3.54 5 6.71s-2.11 5.85-5 6.71v2.06c4.01-.91 7-4.49 7-8.77s-2.99-7.86-7-8.77z"/>
+            </svg>
+          </button>
+        </div>
+      </div>
+
+      <div class="quiz-actions">
+        <div class="action-buttons" x-show="revealed && !answered && !quizComplete">
           <button class="btn-correct" @click="markCorrect()">👍 答对了 +1</button>
-          <button class="btn-wrong" @click="markIncorrect()">💪 再想想</button>
+          <button class="btn-wrong" @click="markIncorrect()">❌ 答错了</button>
+        </div>
+        <div class="action-buttons" x-show="showNext">
+          <button class="btn-next" @click="goNext()">下一个 →</button>
         </div>
       </div>
+    </div>
 
-      <div x-show="answered" class="feedback">
-        <div x-show="isCorrect" class="celebration">
-          <div class="thumbs-up">👍</div>
-          <p class="great-text">Great!</p>
-        </div>
-        <div x-show="!isCorrect" class="encouragement">
-          <p>加油！再记一遍 💪</p>
-        </div>
-        <button class="btn-next" x-show="currentIndex < quizWords.length - 1" @click="nextWord()">下一个 →</button>
-        <div x-show="currentIndex >= quizWords.length - 1" class="complete">
-          <p>🎉 今天的抽查完成啦！</p>
-          <button class="btn-next" @click="startQuiz()">再考一次</button>
-        </div>
+    <!-- Feedback overlay -->
+    <div class="feedback-overlay" x-show="showFeedback" x-transition:enter="transition ease-out duration-300" x-transition:enter-start="opacity-0" x-transition:enter-end="opacity-100">
+      <div class="feedback-content correct" x-show="isCorrect">
+        <div class="big-thumbs-up">👍</div>
+        <p class="great-text">Great!</p>
+      </div>
+      <div class="feedback-content wrong" x-show="!isCorrect">
+        <div class="big-x">😢</div>
+        <p class="wrong-text">答错了</p>
+        <p class="wrong-hint">再记一遍，你一定行！💪</p>
+      </div>
+    </div>
+
+    <!-- Quiz complete overlay -->
+    <div class="feedback-overlay complete-overlay" x-show="quizComplete" x-transition:enter="transition ease-out duration-300" x-transition:enter-start="opacity-0" x-transition:enter-end="opacity-100">
+      <div class="feedback-content correct">
+        <div class="complete-icon">🎉</div>
+        <p class="complete-text">今天的抽查完成啦！</p>
+        <button class="btn-retry" @click="startQuiz()">🔄 再考一次</button>
       </div>
     </div>
   </div>
 
-  <div class="drawer-overlay" x-show="showAdmin" @click.self="showAdmin = false" x-transition.opacity></div>
-  <div class="drawer" x-show="showAdmin" x-transition:enter="drawer-enter" x-transition:leave="drawer-leave">
-    <header class="drawer-header">
-      <h2>📝 管理</h2>
-      <button class="close-btn" @click="showAdmin = false">✕</button>
-    </header>
-
-    <nav class="admin-tabs">
-      <button :class="{ active: adminTab === 'add' }" @click="adminTab = 'add'">添加</button>
-      <button :class="{ active: adminTab === 'list' }" @click="adminTab = 'list'">词库</button>
-      <button :class="{ active: adminTab === 'stats' }" @click="adminTab = 'stats'">统计</button>
-    </nav>
-
-    <div x-show="adminTab === 'add'" class="tab-content">
-      <div class="add-form">
-        <input type="text" x-model="newEnglish" placeholder="英文单词" @keydown.enter="addWord()">
-        <input type="text" x-model="newChinese" placeholder="中文意思" @keydown.enter="addWord()">
-        <button class="btn-save" @click="addWord()" :disabled="!newEnglish || !newChinese">保存</button>
-        <p class="save-msg" x-show="saveMsg" x-text="saveMsg"></p>
+  <!-- ==================== ADMIN VIEW ==================== -->
+  <div class="admin-page" x-show="view === 'admin'" x-cloak>
+    <!-- Sidebar -->
+    <aside class="admin-sidebar">
+      <div class="sidebar-header">
+        <h2>📋 后台管理</h2>
+        <button class="btn-back" @click="view = 'quiz'" title="返回抽查页面">← 返回</button>
       </div>
-    </div>
-
-    <div x-show="adminTab === 'list'" class="tab-content">
-      <input type="text" x-model="searchQuery" placeholder="🔍 搜索单词..." class="search-input">
-      <div class="word-list">
-        <template x-for="word in filteredWords" :key="word.id">
-          <div class="word-item">
-            <div class="word-info">
-              <span class="word-en" x-text="word.english"></span>
-              <span class="word-zh" x-text="word.chinese"></span>
-            </div>
-            <div class="word-actions">
-              <button class="btn-sm btn-edit" @click="editWord(word)">编辑</button>
-              <button class="btn-sm btn-del" @click="deleteWord(word.id)">删除</button>
-            </div>
-          </div>
+      <nav class="sidebar-nav">
+        <button :class="{ active: adminTab === 'voice' }" @click="adminTab = 'voice'; loadVoiceSettings()">
+          <span class="nav-icon">🔊</span>
+          <span>语音设置</span>
+        </button>
+        <button :class="{ active: adminTab === 'words' }" @click="adminTab = 'words'; fetchWords()">
+          <span class="nav-icon">📝</span>
+          <span>单词管理</span>
+        </button>
+        <button :class="{ active: adminTab === 'stats' }" @click="adminTab = 'stats'; loadAllWordStats()">
+          <span class="nav-icon">📊</span>
+          <span>统计</span>
+        </button>
+        <template x-if="currentUser?.role === 'admin'">
+          <button :class="{ active: adminTab === 'users' }" @click="adminTab = 'users'; fetchUsers()">
+            <span class="nav-icon">👥</span>
+            <span>用户管理</span>
+          </button>
         </template>
-      </div>
-    </div>
-
-    <div x-show="adminTab === 'stats'" class="tab-content">
-      <nav class="stats-tabs">
-        <button :class="{ active: statsTab === 'word' }" @click="statsTab = 'word'">单词详情</button>
-        <button :class="{ active: statsTab === 'daily' }" @click="setStatsTab('daily')">每日报告</button>
-        <button :class="{ active: statsTab === 'trend' }" @click="setStatsTab('trend')">趋势</button>
-        <button :class="{ active: statsTab === 'worst' }" @click="setStatsTab('worst')">错词排行</button>
       </nav>
+    </aside>
 
-      <div x-show="statsTab === 'word'" class="stats-panel">
-        <button class="btn-sm btn-load" @click="loadAllWordStats()">加载全部</button>
-        <div class="word-stats-list">
-          <template x-for="ws in wordStats" :key="ws.id">
-            <div class="word-stat-item">
-              <span class="ws-word" x-text="`${ws.english} (${ws.chinese})`"></span>
-              <span class="ws-accuracy" :class="ws.accuracy >= 0.8 ? 'good' : ws.accuracy >= 0.5 ? 'warn' : 'bad'"
-                    x-text="ws.total > 0 ? `${Math.round(ws.accuracy * 100)}% (${ws.correct}/${ws.total})` : '未考过'">
-              </span>
-            </div>
-          </template>
-        </div>
-      </div>
+    <!-- Content -->
+    <main class="admin-content">
+      <!-- ===== Voice Settings ===== -->
+      <div x-show="adminTab === 'voice'" class="content-panel">
+        <h3 class="panel-title">🔊 语音设置</h3>
 
-      <div x-show="statsTab === 'daily'" class="stats-panel">
-        <template x-for="d in dailyStats" :key="d.date">
-          <div class="daily-item">
-            <span class="d-date" x-text="d.date"></span>
-            <span class="d-count" x-text="`共 ${d.total} 题`"></span>
-            <span class="d-accuracy" x-text="`正确率 ${Math.round(d.accuracy * 100)}%`"></span>
+        <div class="setting-card">
+          <label class="setting-label">发音类型</label>
+          <div class="speak-gender-options">
+            <button class="speak-gender-btn" :class="{ active: pendingGender === 'female' }" @click="setSpeakGender('female')">
+              女声
+            </button>
+            <button class="speak-gender-btn" :class="{ active: pendingGender === 'male' }" @click="setSpeakGender('male')">
+              男声
+            </button>
           </div>
-        </template>
-        <p x-show="dailyStats.length === 0" class="empty-hint">暂无数据</p>
+        </div>
+
+        <div class="setting-card">
+          <label class="setting-label">具体发音人</label>
+          <select class="speak-voice-select" x-model="pendingVoiceName" @change="setSpeakVoice(pendingVoiceName)">
+            <template x-for="voice in getVoicesList()" :key="voice.name">
+              <option :value="voice.name" x-text="voice.name.split('-').pop()"></option>
+            </template>
+          </select>
+        </div>
+
+        <div class="setting-card">
+          <label class="setting-label">发音速度：<span x-text="pendingSpeed.toFixed(2)"></span>x</label>
+          <div class="speak-speed-options">
+            <template x-for="speed in [0.5, 0.6, 0.7, 0.8, 0.85, 0.9, 1.0, 1.1, 1.2, 1.5]" :key="speed">
+              <button class="speak-speed-btn" :class="{ active: pendingSpeed === speed }" @click="setSpeakSpeed(speed)">
+                <span x-text="speed.toFixed(2)"></span>
+              </button>
+            </template>
+          </div>
+        </div>
+
+        <div class="setting-card voice-actions" style="text-align: center;">
+          <button class="btn-preview" @click="previewSpeak()">试听</button>
+          <button class="btn-save" @click="saveVoiceSettings()" x-show="voiceSettingsChanged" style="margin-left: 12px;">保存设置</button>
+        </div>
+
+        <p x-show="voiceSettingsChanged" style="text-align: center; color: #fbbf24; font-size: 14px; margin-top: 8px;">有未保存的更改</p>
       </div>
 
-      <div x-show="statsTab === 'trend'" class="stats-panel">
-        <div class="trend-chart">
-          <template x-for="t in trendData" :key="t.label">
-            <div class="trend-bar">
-              <span class="trend-label" x-text="t.label"></span>
-              <div class="trend-fill">
-                <div class="trend-fill-inner" :style="`width: ${t.accuracy * 100}%`"></div>
+      <!-- ===== Word Management ===== -->
+      <div x-show="adminTab === 'words'" class="content-panel">
+        <h3 class="panel-title">📝 单词管理</h3>
+
+        <!-- Add Word -->
+        <div class="add-form">
+          <input type="text" x-model="newEnglish" placeholder="英文单词" @keydown.enter="addWord()">
+          <input type="text" x-model="newChinese" placeholder="中文意思" @keydown.enter="addWord()">
+          <button class="btn-save" @click="addWord()" :disabled="!newEnglish || !newChinese">添加</button>
+          <p class="save-msg" x-show="saveMsg" x-text="saveMsg"></p>
+        </div>
+
+        <!-- Word List -->
+        <div class="word-list-section">
+          <input type="text" x-model="searchQuery" placeholder="🔍 搜索单词..." class="search-input">
+          <div class="word-list">
+            <template x-for="word in filteredWords" :key="word.id">
+              <div class="word-item">
+                <div class="word-info">
+                  <span class="word-en" x-text="word.english"></span>
+                  <span class="word-zh" x-text="word.chinese"></span>
+                </div>
+                <div class="word-actions">
+                  <button class="btn-sm btn-edit" @click="editWord(word)">编辑</button>
+                  <button class="btn-sm btn-del" @click="deleteWord(word.id)">删除</button>
+                </div>
               </div>
-              <span class="trend-value" x-text="`${Math.round(t.accuracy * 100)}%`"></span>
+            </template>
+          </div>
+        </div>
+      </div>
+
+      <!-- ===== Statistics ===== -->
+      <div x-show="adminTab === 'stats'" class="content-panel">
+        <h3 class="panel-title">📊 统计</h3>
+
+        <nav class="stats-tabs">
+          <button :class="{ active: statsTab === 'word' }" @click="setStatsTab('word')">单词详情</button>
+          <button :class="{ active: statsTab === 'daily' }" @click="setStatsTab('daily')">每日报告</button>
+          <button :class="{ active: statsTab === 'trend' }" @click="setStatsTab('trend')">趋势</button>
+          <button :class="{ active: statsTab === 'worst' }" @click="setStatsTab('worst')">错词排行</button>
+        </nav>
+
+        <div x-show="statsTab === 'word'" class="stats-panel">
+          <div class="word-stats-list">
+            <template x-for="ws in wordStats" :key="ws.id">
+              <div class="word-stat-item">
+                <span class="ws-word" x-text="`${ws.english} (${ws.chinese})`"></span>
+                <span class="ws-accuracy" :class="ws.accuracy >= 0.8 ? 'good' : ws.accuracy >= 0.5 ? 'warn' : 'bad'"
+                      x-text="ws.total > 0 ? `${Math.round(ws.accuracy * 100)}% (${ws.correct}/${ws.total})` : '未考过'">
+                </span>
+              </div>
+            </template>
+          </div>
+        </div>
+
+        <div x-show="statsTab === 'daily'" class="stats-panel">
+          <template x-for="d in dailyStats" :key="d.date">
+            <div class="daily-item">
+              <span class="d-date" x-text="d.date"></span>
+              <span class="d-count" x-text="`共 ${d.total} 题`"></span>
+              <span class="d-accuracy" x-text="`正确率 ${Math.round(d.accuracy * 100)}%`"></span>
             </div>
           </template>
+          <p x-show="dailyStats.length === 0" class="empty-hint">暂无数据</p>
         </div>
-        <p x-show="trendData.length === 0" class="empty-hint">暂无数据</p>
-      </div>
 
-      <div x-show="statsTab === 'worst'" class="stats-panel">
-        <template x-for="(w, i) in worstWords" :key="w.id">
-          <div class="worst-item">
-            <span class="worst-rank" x-text="`${i + 1}`"></span>
-            <span class="worst-word" x-text="`${w.english} (${w.chinese})`"></span>
-            <span class="worst-accuracy" :class="w.accuracy >= 0.5 ? 'warn' : 'bad'"
-                  x-text="`${Math.round(w.accuracy * 100)}%`"></span>
+        <div x-show="statsTab === 'trend'" class="stats-panel">
+          <div class="trend-chart">
+            <template x-for="t in trendData" :key="t.label">
+              <div class="trend-bar">
+                <span class="trend-label" x-text="t.label"></span>
+                <div class="trend-fill">
+                  <div class="trend-fill-inner" :style="`width: ${t.accuracy * 100}%`"></div>
+                </div>
+                <span class="trend-value" x-text="`${Math.round(t.accuracy * 100)}%`"></span>
+              </div>
+            </template>
           </div>
-        </template>
-        <p x-show="worstWords.length === 0" class="empty-hint">暂无数据</p>
-      </div>
-    </div>
-
-    <div class="edit-modal" x-show="editingWord">
-      <div class="edit-form">
-        <h3>编辑单词</h3>
-        <input type="text" x-model="editEnglish" placeholder="英文">
-        <input type="text" x-model="editChinese" placeholder="中文">
-        <div class="edit-actions">
-          <button class="btn-save" @click="saveEdit()">保存</button>
-          <button class="btn-cancel" @click="editingWord = null">取消</button>
+          <p x-show="trendData.length === 0" class="empty-hint">暂无数据</p>
         </div>
+
+        <div x-show="statsTab === 'worst'" class="stats-panel">
+          <template x-for="(w, i) in worstWords" :key="w.id">
+            <div class="worst-item">
+              <span class="worst-rank" x-text="`${i + 1}`"></span>
+              <span class="worst-word" x-text="`${w.english} (${w.chinese})`"></span>
+              <span class="worst-accuracy" :class="w.accuracy >= 0.5 ? 'warn' : 'bad'"
+                    x-text="`${Math.round(w.accuracy * 100)}%`"></span>
+            </div>
+          </template>
+          <p x-show="worstWords.length === 0" class="empty-hint">暂无数据</p>
+        </div>
+      </div>
+
+      <!-- ===== User Management ===== -->
+      <div x-show="adminTab === 'users'" class="content-panel">
+        <h3 class="panel-title">👥 用户管理</h3>
+
+        <div class="add-form">
+          <input type="text" x-model="newUsername" placeholder="用户名">
+          <input type="password" x-model="newPassword" placeholder="密码">
+          <select x-model="newRole">
+            <option value="user">普通用户</option>
+            <option value="admin">管理员</option>
+          </select>
+          <button class="btn-save" @click="addUser()" :disabled="!newUsername || !newPassword">创建</button>
+          <p class="save-msg" x-show="userSaveMsg" x-text="userSaveMsg"></p>
+        </div>
+
+        <div class="word-list-section">
+          <div class="word-list">
+            <template x-for="u in users" :key="u.id">
+              <div class="word-item">
+                <div class="word-info">
+                  <span class="word-en" x-text="u.username"></span>
+                  <span class="word-zh" :class="u.role === 'admin' ? 'role-admin' : 'role-user'" x-text="u.role === 'admin' ? '管理员' : '用户'"></span>
+                </div>
+                <div class="word-actions">
+                  <button class="btn-sm btn-edit" @click="editUser(u)" x-show="u.id !== currentUser?.id">编辑</button>
+                  <button class="btn-sm btn-del" @click="deleteUser(u.id)" x-show="u.id !== currentUser?.id">删除</button>
+                  <span x-show="u.id === currentUser?.id" class="self-badge">自己</span>
+                </div>
+              </div>
+            </template>
+          </div>
+        </div>
+      </div>
+    </main>
+  </div>
+
+  <!-- Edit Modal -->
+  <div class="edit-modal" x-show="editingWord" @click.self="editingWord = null">
+    <div class="edit-form">
+      <h3>编辑单词</h3>
+      <input type="text" x-model="editEnglish" placeholder="英文">
+      <input type="text" x-model="editChinese" placeholder="中文">
+      <div class="edit-actions">
+        <button class="btn-save" @click="saveEdit()">保存</button>
+        <button class="btn-cancel" @click="editingWord = null">取消</button>
       </div>
     </div>
   </div>
+
+  <!-- Edit User Modal -->
+  <div class="edit-modal" x-show="editingUser" @click.self="editingUser = null">
+    <div class="edit-form">
+      <h3>编辑用户</h3>
+      <input type="text" x-model="editUserUsername" placeholder="用户名">
+      <input type="password" x-model="editUserPassword" placeholder="新密码（留空不改）">
+      <select x-model="editUserRole">
+        <option value="user">普通用户</option>
+        <option value="admin">管理员</option>
+      </select>
+      <div class="edit-actions">
+        <button class="btn-save" @click="saveEditUser()">保存</button>
+        <button class="btn-cancel" @click="editingUser = null">取消</button>
+      </div>
+    </div>
+  </div>
+
+  <script src="alpine.min.js" defer></script>
+  <script src="app.js"></script>
 
 </body>
 </html>
