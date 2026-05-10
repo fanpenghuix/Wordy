@@ -250,11 +250,53 @@
         <h3 class="panel-title">📊 统计</h3>
 
         <nav class="stats-tabs">
+          <button :class="{ active: statsTab === 'sm2' }" @click="setStatsTab('sm2')">间隔重复</button>
           <button :class="{ active: statsTab === 'word' }" @click="setStatsTab('word')">单词详情</button>
           <button :class="{ active: statsTab === 'daily' }" @click="setStatsTab('daily')">每日报告</button>
           <button :class="{ active: statsTab === 'trend' }" @click="setStatsTab('trend')">趋势</button>
           <button :class="{ active: statsTab === 'worst' }" @click="setStatsTab('worst')">错词排行</button>
         </nav>
+
+        <div x-show="statsTab === 'sm2'" class="stats-panel">
+          <div class="sm2-overview" x-show="sm2Overview">
+            <div class="sm2-stat">
+              <span class="sm2-label">总词数</span>
+              <span class="sm2-value" x-text="sm2Overview.total"></span>
+            </div>
+            <div class="sm2-stat">
+              <span class="sm2-label">今日到期</span>
+              <span class="sm2-value" x-text="sm2Overview.dueToday"></span>
+            </div>
+            <div class="sm2-stat">
+              <span class="sm2-label">平均难度系数</span>
+              <span class="sm2-value" x-text="sm2Overview.avgEfactor"></span>
+            </div>
+            <div class="sm2-stages">
+              <template x-for="stage in sm2Overview.stageDist" :key="stage.stage">
+                <div class="sm2-stage-item">
+                  <span x-text="stage.stage"></span>
+                  <span class="sm2-stage-count" x-text="stage.count"></span>
+                </div>
+              </template>
+            </div>
+          </div>
+          <div class="sm2-word-list">
+            <template x-for="sw in sm2WordStates" :key="sw.id">
+              <div class="sm2-word-item">
+                <div class="sm2-word-info">
+                  <span class="sm2-word-text" x-text="`${sw.english} (${sw.chinese})`"></span>
+                  <span class="sm2-stage-badge" :class="getMasteryColor(sw.efactor)" x-text="getStageLabel(sw.repetitions)"></span>
+                </div>
+                <div class="sm2-word-details">
+                  <span class="sm2-detail" x-text="`间隔: ${sw.interval}天`"></span>
+                  <span class="sm2-detail" :class="getMasteryColor(sw.efactor)" x-text="`系数: ${sw.efactor}`"></span>
+                  <span class="sm2-detail" x-text="`下次: ${sw.next_review}`"></span>
+                </div>
+              </div>
+            </template>
+          </div>
+          <p x-show="sm2WordStates.length === 0" class="empty-hint">暂无数据</p>
+        </div>
 
         <div x-show="statsTab === 'word'" class="stats-panel">
           <div class="word-stats-list">

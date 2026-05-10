@@ -43,6 +43,8 @@ function quizApp() {
     dailyStats: [],
     trendData: [],
     worstWords: [],
+    sm2Overview: null,
+    sm2WordStates: [],
 
     // User management
     users: [],
@@ -469,8 +471,39 @@ function quizApp() {
       } catch (e) { console.error(e); }
     },
 
+    async loadSm2Stats() {
+      try {
+        const res = await fetch('/api/stats/sm2');
+        this.sm2Overview = await res.json();
+      } catch (e) { console.error(e); }
+    },
+
+    async loadSm2WordStates() {
+      try {
+        const res = await fetch('/api/stats/sm2/words');
+        this.sm2WordStates = await res.json();
+      } catch (e) { console.error(e); }
+    },
+
+    getMasteryColor(efactor) {
+      if (efactor >= 2.3) return 'good';
+      if (efactor >= 1.8) return 'warn';
+      return 'bad';
+    },
+
+    getStageLabel(repetitions) {
+      if (repetitions === 0) return '新词/错误';
+      if (repetitions === 1) return '学习中';
+      if (repetitions === 2) return '熟悉';
+      return '已掌握';
+    },
+
     setStatsTab(tab) {
       this.statsTab = tab;
+      if (tab === 'sm2') {
+        if (!this.sm2Overview) this.loadSm2Stats();
+        if (this.sm2WordStates.length === 0) this.loadSm2WordStates();
+      }
       if (tab === 'word') this.loadAllWordStats();
       if (tab === 'daily' && this.dailyStats.length === 0) this.loadDailyStats();
       if (tab === 'trend' && this.trendData.length === 0) this.loadTrendData();
