@@ -50,6 +50,7 @@
   <div class="app" x-show="view === 'quiz'" x-cloak>
     <header>
       <span class="progress" x-show="quizWords.length > 0" x-text="`进度 ${currentIndex + 1}/${quizWords.length}`"></span>
+      <span class="progress-placeholder" x-show="quizWords.length === 0"></span>
       <div class="header-actions">
         <div class="user-menu" x-show="currentUser">
           <button class="user-menu-trigger" @click="showUserMenu = !showUserMenu" @click.outside="showUserMenu = false">
