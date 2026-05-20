@@ -1,6 +1,6 @@
-# Word Quiz
+# Wordy
 
-单词抽查 Web 应用，支持答题、词库管理和 Google TTS 发音。
+Wordy — 单词抽查 Web 应用，支持答题、词库管理和 Google TTS 发音。
 
 ## Tech Stack
 

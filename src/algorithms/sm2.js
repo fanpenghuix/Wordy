@@ -17,28 +17,36 @@ export function initSm2Review(userId, wordId) {
   `).run(userId, wordId, t);
 }
 
-export function recordResult(userId, wordId, correct) {
+export function recordResult(userId, wordId, correct, hard = false) {
   const t = today();
   const review = db.prepare(
     'SELECT * FROM sm2_reviews WHERE user_id = ? AND word_id = ?'
   ).get(userId, wordId);
 
   if (!review) {
-    initSm2Review(userId, wordId);
-    return recordResult(userId, wordId, correct);
+    if (hard) {
+      db.prepare(`
+        INSERT INTO sm2_reviews (user_id, word_id, interval, efactor, repetitions, next_review)
+        VALUES (?, ?, 0, 2.2, 0, ?)
+        ON CONFLICT(user_id, word_id) DO NOTHING
+      `).run(userId, wordId, t);
+    } else {
+      initSm2Review(userId, wordId);
+    }
+    return recordResult(userId, wordId, correct, hard);
   }
 
   let { interval, efactor, repetitions } = review;
 
   if (correct) {
     if (repetitions === 0) interval = 1;
-    else if (repetitions === 1) interval = 3;
-    else interval = Math.round(interval * efactor);
+    else if (repetitions === 1) interval = hard ? 2 : 3;
+    else interval = Math.round(interval * efactor * (hard ? 0.8 : 1));
     repetitions += 1;
   } else {
     repetitions = 0;
     interval = 0;
-    efactor = Math.max(1.3, efactor - 0.2);
+    efactor = Math.max(1.3, efactor - (hard ? 0.35 : 0.2));
   }
 
   const nextReview = correct ? addDays(t, interval) : t;
@@ -52,9 +60,23 @@ export function recordResult(userId, wordId, correct) {
   return { interval, efactor, repetitions, next_review: nextReview, last_review: t };
 }
 
+function getUserQuizLimit(userId) {
+  const prefs = db.prepare('SELECT key, value FROM user_preferences WHERE user_id = ? AND key IN (?, ?)')
+    .all(userId, 'quizLimitMode', 'quizLimitValue');
+  const map = {};
+  for (const p of prefs) map[p.key] = p.value;
+
+  const mode = map.quizLimitMode ?? 'ratio';
+  const value = Number(map.quizLimitValue ?? 20);
+  const totalWords = getTotalWordCount(userId);
+
+  if (mode === 'fixed') return value;
+  return Math.ceil(totalWords * value / 100);
+}
+
 function getDueWords(userId, limit) {
   const t = today();
-  const dailyLimit = limit || Math.ceil(getTotalWordCount(userId) * 0.2) || 20;
+  const dailyLimit = limit ?? getUserQuizLimit(userId);
 
   const dueWords = db.prepare(`
     SELECT w.*, s.interval, s.efactor, s.repetitions, s.next_review,
@@ -66,29 +88,57 @@ function getDueWords(userId, limit) {
     LIMIT ?
   `).all(userId, t, dailyLimit);
 
-  const newWords = db.prepare(`
+  const remaining = Math.max(0, dailyLimit - dueWords.length);
+  const newWords = remaining > 0 ? db.prepare(`
     SELECT w.*, 0 as interval, 2.5 as efactor, 0 as repetitions, ? as next_review, 0 as is_wrong
     FROM words w
     WHERE w.user_id = ? AND w.id NOT IN (SELECT word_id FROM sm2_reviews WHERE user_id = ?)
-  `).all(t, userId, userId);
+    LIMIT ?
+  `).all(t, userId, userId, remaining) : [];
 
-  return [...dueWords, ...newWords];
+  // If still under dailyLimit, fill with earliest upcoming reviews
+  const fetched = dueWords.length + newWords.length;
+  const extra = Math.max(0, dailyLimit - fetched);
+  const existingIds = fetched > 0 ? [...dueWords, ...newWords].map(w => w.id) : [];
+  const extraWords = extra > 0 && existingIds.length > 0 ? db.prepare(`
+    SELECT w.*, s.interval, s.efactor, s.repetitions, s.next_review,
+           CASE WHEN s.last_review IS NULL OR s.repetitions = 0 THEN 1 ELSE 0 END as is_wrong
+    FROM words w
+    JOIN sm2_reviews s ON w.id = s.word_id AND w.user_id = s.user_id
+    WHERE s.user_id = ?
+      AND s.next_review > ?
+      AND w.id NOT IN (${existingIds.join(',')})
+    ORDER BY s.next_review ASC
+    LIMIT ?
+  `).all(userId, t, extra) : extra > 0 ? db.prepare(`
+    SELECT w.*, s.interval, s.efactor, s.repetitions, s.next_review,
+           CASE WHEN s.last_review IS NULL OR s.repetitions = 0 THEN 1 ELSE 0 END as is_wrong
+    FROM words w
+    JOIN sm2_reviews s ON w.id = s.word_id AND w.user_id = s.user_id
+    WHERE s.user_id = ? AND s.next_review > ?
+    ORDER BY s.next_review ASC
+    LIMIT ?
+  `).all(userId, t, extra) : [];
+
+  const allWords = [...dueWords, ...newWords, ...extraWords];
+  // Randomize order so repeated quizzes aren't predictable
+  return allWords.sort(() => Math.random() - 0.5);
 }
 
 function getTotalWordCount(userId) {
   return db.prepare('SELECT COUNT(*) as count FROM words WHERE user_id = ?').get(userId).count;
 }
 
-export { getDueWords as getSm2DueWords };
+export { getDueWords as getSm2DueWords, getUserQuizLimit };
 
 export function getSm2Stats(userId) {
   const total = db.prepare('SELECT COUNT(*) as count FROM sm2_reviews WHERE user_id = ?').get(userId).count;
   const stageDist = db.prepare(`
     SELECT CASE
-      WHEN repetitions = 0 THEN 'new/wrong'
-      WHEN repetitions = 1 THEN 'learning'
-      WHEN repetitions = 2 THEN 'familiar'
-      ELSE 'mastered'
+      WHEN repetitions = 0 THEN '新词/错词'
+      WHEN repetitions = 1 THEN '学习中'
+      WHEN repetitions = 2 THEN '熟悉'
+      ELSE '已掌握'
     END as stage, COUNT(*) as count
     FROM sm2_reviews WHERE user_id = ? GROUP BY stage
   `).all(userId);

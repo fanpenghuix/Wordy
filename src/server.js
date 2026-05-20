@@ -8,6 +8,7 @@ import statsRouter from './api/stats.js';
 import speakRouter from './api/speak.js';
 import authRouter from './api/auth.js';
 import usersRouter from './api/users.js';
+import settingsRouter from './api/settings.js';
 
 process.env.ACTIVE_STRATEGY = process.env.ACTIVE_STRATEGY || 'sm2';
 
@@ -30,6 +31,7 @@ app.use('/api/words', wordsRouter);
 app.use('/api/quiz', quizRouter);
 app.use('/api/stats', statsRouter);
 app.use('/api/speak', speakRouter);
+app.use('/api/settings', settingsRouter);
 
 app.get('/{*path}', (req, res) => {
   res.sendFile(path.join(__dirname, '..', 'public', 'index.html'));
@@ -41,7 +43,7 @@ app.use((err, req, res, next) => {
 });
 
 app.listen(PORT, () => {
-  console.log(`Word Quiz server running on port ${PORT}`);
+  console.log(`Wordy server running on port ${PORT}`);
 });
 
 export default app;

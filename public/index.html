@@ -2,8 +2,8 @@
 <html lang="zh-CN">
 <head>
   <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-  <title>⭐ 单词抽查</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+  <title>⭐ Wordy</title>
   <link rel="stylesheet" href="style.css">
 </head>
 <body x-data="quizApp()" x-init="init()">
@@ -11,11 +11,16 @@
   <!-- Stars container -->
   <div class="stars" id="stars"></div>
 
+  <!-- Auth loading overlay -->
+  <div class="auth-loader" x-show="!authReady" x-cloak>
+    <div class="spinner"></div>
+  </div>
+
   <!-- ==================== LOGIN VIEW ==================== -->
   <div class="app login-view" x-show="view === 'login'" x-cloak>
     <div class="login-card">
-      <h1 class="login-title">单词抽查</h1>
-      <p class="login-subtitle">登录后开始抽查</p>
+      <h1 class="login-title">Wordy</h1>
+      <p class="login-subtitle">听发音，拼单词</p>
       <form @submit.prevent="login()">
         <div class="login-field">
           <input type="text" x-model="loginUsername" placeholder="用户名" autocomplete="username" required>
@@ -49,13 +54,14 @@
   <!-- ==================== QUIZ VIEW ==================== -->
   <div class="app" x-show="view === 'quiz'" x-cloak>
     <header>
-      <span class="progress" x-show="quizWords.length > 0" x-text="`进度 ${currentIndex + 1}/${quizWords.length}`"></span>
-      <span class="progress-placeholder" x-show="quizWords.length === 0"></span>
       <div class="header-actions">
+        <button class="spell-mode-btn" x-show="currentUser" @click="toggleSpellMode()" :class="{ active: spellMode }" :title="spellMode ? '切换为认读模式' : '切换为拼写模式'">
+          <span x-show="!spellMode">✏️ 拼写模式</span>
+          <span x-show="spellMode">📖 认读模式</span>
+        </button>
         <div class="user-menu" x-show="currentUser">
           <button class="user-menu-trigger" @click="showUserMenu = !showUserMenu" @click.outside="showUserMenu = false">
-            <span class="user-avatar"></span>
-            <span x-text="currentUser?.username"></span>
+            <span>👤</span><span x-text="currentUser?.username"></span>
             <svg class="user-menu-chevron" viewBox="0 0 24 24" width="14" height="14" fill="currentColor" :class="{ open: showUserMenu }">
               <path d="M7 10l5 5 5-5z"/>
             </svg>
@@ -71,11 +77,37 @@
           </div>
         </div>
       </div>
+      <div class="star-progress" x-show="quizWords.length > 0">
+        <template x-for="(result, idx) in quizResults" :key="idx">
+          <span class="progress-star"
+                :class="{
+                  'lit': result === 1,
+                  'dimmed': result === 0,
+                  'dim': result === null && idx <= currentIndex,
+                  'pending': result === null && idx > currentIndex,
+                  'current': idx === currentIndex && result === null
+                }"
+                @click="if (idx < currentIndex) goToQuizWord(idx)">
+            <svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"/></svg>
+          </span>
+        </template>
+      </div>
+      <span class="progress-placeholder" x-show="quizWords.length === 0"></span>
     </header>
 
-    <div class="empty-state" x-show="quizWords.length === 0 && !loading">
-      <p>还没有单词哦！</p>
-      <p class="hint">点击左上角头像进入后台添加单词 →</p>
+    <div class="empty-state" x-show="quizWords.length === 0 && !loading && !quizComplete">
+      <template x-if="totalWords === 0">
+        <div>
+          <p>还没有单词哦！</p>
+          <p class="hint">点击左上角头像进入后台添加单词 →</p>
+        </div>
+      </template>
+      <template x-if="totalWords > 0">
+        <div>
+          <p>准备好抽查了吗？</p>
+          <button class="btn-start-quiz" @click="startQuiz()">开始抽查</button>
+        </div>
+      </template>
     </div>
 
     <div class="loading" x-show="loading">
@@ -84,17 +116,27 @@
     </div>
 
     <div class="quiz-card" x-show="quizWords.length > 0 && currentWord && !loading">
-      <div class="quiz-word-area" x-show="!revealed" x-cloak>
+      <!-- Normal mode: show Chinese -->
+      <div class="quiz-word-area" x-show="!revealed && !spellMode" x-cloak>
         <p class="chinese" x-text="currentWord?.chinese"></p>
-        <div class="action-buttons-inline">
-          <button class="btn-reveal" @click="reveal()">🔍 点击显示答案</button>
-          <button class="btn-skip" @click="skipWord()">⏭ 跳过</button>
+      </div>
+
+      <!-- Spell mode: listen & hint area -->
+      <div class="quiz-word-area" x-show="!revealed && spellMode" x-cloak>
+        <div class="spell-hint-area">
+          <button class="btn-speak-large" @click="speakWord()" title="听发音">
+            <svg viewBox="0 0 24 24" width="48" height="48" fill="currentColor">
+              <path d="M3 9v6h4l5 5V4L7 9H3zm13.5 3c0-1.77-1.02-3.29-2.5-4.03v8.05c1.48-.73 2.5-2.25 2.5-4.02zM14 3.23v2.06c2.89.86 5 3.54 5 6.71s-2.11 5.85-5 6.71v2.06c4.01-.91 7-4.49 7-8.77s-2.99-7.86-7-8.77z"/>
+            </svg>
+          </button>
+          <p class="spell-hint" x-show="hintRevealed" x-text="spellHint"></p>
+          <button class="btn-hint" x-show="!hintRevealed" @click="showSpellHint()">🔤 提示首字母</button>
         </div>
       </div>
 
       <div class="quiz-word-area" x-show="revealed" x-cloak>
         <div class="word-with-speak">
-          <p class="english" :class="{ 'incorrect': markWrong }" x-text="currentWord?.english"></p>
+          <p class="english" :class="{ 'incorrect': markWrong, 'correct': correctFlash }" x-text="currentWord?.english"></p>
           <button class="btn-speak" @click="speakWord()" title="英式发音朗读">
             <svg viewBox="0 0 24 24" width="24" height="24" fill="currentColor">
               <path d="M3 9v6h4l5 5V4L7 9H3zm13.5 3c0-1.77-1.02-3.29-2.5-4.03v8.05c1.48-.73 2.5-2.25 2.5-4.02zM14 3.23v2.06c2.89.86 5 3.54 5 6.71s-2.11 5.85-5 6.71v2.06c4.01-.91 7-4.49 7-8.77s-2.99-7.86-7-8.77z"/>
@@ -104,26 +146,28 @@
       </div>
 
       <div class="quiz-actions">
-        <div class="action-buttons" x-show="revealed && !answered && !quizComplete">
-          <button class="btn-correct" @click="markCorrect()">👍 答对了 +1</button>
-          <button class="btn-wrong" @click="markIncorrect()">❌ 答错了</button>
+        <div class="action-buttons-stacked" x-show="!revealed">
+          <button class="btn-reveal" @click="reveal()">🔍 显示答案</button>
+          <button class="btn-skip-small" @click="skipWord()">⏭ 跳过</button>
         </div>
-        <div class="action-buttons" x-show="showNext">
-          <button class="btn-next" @click="goNext()">下一个 →</button>
+        <div class="action-buttons-stacked" x-show="revealed && !answered && !quizComplete">
+          <button class="btn-correct" @click="markCorrect()">👍 答对了 +1</button>
+          <button class="btn-wrong" @click="markIncorrect()">😞 答错了</button>
+        </div>
+        <div class="action-buttons action-buttons-stacked" x-show="showNext">
+          <button class="btn-next" @click="goNext()">
+            <svg viewBox="0 0 24 24" width="20" height="20" fill="currentColor"><path d="M10 6L8.59 7.41 13.17 12l-4.58 4.59L10 18l6-6z"/></svg>
+            下一个
+          </button>
+          <button class="btn-restart" @click="restartQuiz()">🔄 重新开始</button>
         </div>
       </div>
     </div>
 
-    <!-- Feedback overlay -->
-    <div class="feedback-overlay" x-show="showFeedback" x-transition:enter="transition ease-out duration-300" x-transition:enter-start="opacity-0" x-transition:enter-end="opacity-100">
-      <div class="feedback-content correct" x-show="isCorrect">
-        <div class="big-thumbs-up">👍</div>
-        <p class="great-text">Great!</p>
-      </div>
-      <div class="feedback-content wrong" x-show="!isCorrect">
-        <div class="big-x">😢</div>
-        <p class="wrong-text">答错了</p>
-        <p class="wrong-hint">再记一遍，你一定行！💪</p>
+    <!-- Fly-star feedback (no overlay, just the animation) -->
+    <div class="fly-star-container" x-show="_showFlyStar" x-transition:leave="transition ease-in duration-300" x-transition:leave-start="opacity-1" x-transition:leave-end="opacity-0">
+      <div class="fly-star" :class="{ wrong: !_isCorrectAnswer }" :style="flyStarStyle">
+        <svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"/></svg>
       </div>
     </div>
 
@@ -132,7 +176,12 @@
       <div class="feedback-content correct">
         <div class="complete-icon">🎉</div>
         <p class="complete-text">今天的抽查完成啦！</p>
-        <button class="btn-retry" @click="startQuiz()">🔄 再考一次</button>
+        <div class="accuracy-display">
+          <span class="accuracy-value" x-text="todayAccuracy"></span>
+          <span class="accuracy-label">正确率</span>
+          <span class="accuracy-detail" x-text="correctCount + ' / ' + totalAnswered"></span>
+        </div>
+        <button class="btn-retry" @click="retryQuiz()">🔄 再考一次</button>
       </div>
     </div>
   </div>
@@ -142,13 +191,17 @@
     <!-- Sidebar -->
     <aside class="admin-sidebar">
       <div class="sidebar-header">
-        <h2>📋 后台管理</h2>
         <button class="btn-back" @click="navigate('/')" title="返回抽查页面">← 返回</button>
+        <h2>📋 后台管理</h2>
       </div>
       <nav class="sidebar-nav">
         <button :class="{ active: adminTab === 'voice' }" @click="navigate('/admin/voice')">
           <span class="nav-icon">🔊</span>
           <span>语音设置</span>
+        </button>
+        <button :class="{ active: adminTab === 'quizLimit' }" @click="navigate('/admin/quizLimit')">
+          <span class="nav-icon">📅</span>
+          <span>抽查设置</span>
         </button>
         <button :class="{ active: adminTab === 'words' }" @click="navigate('/admin/words')">
           <span class="nav-icon">📝</span>
@@ -207,40 +260,111 @@
 
         <div class="setting-card voice-actions" style="text-align: center;">
           <button class="btn-preview" @click="previewSpeak()">试听</button>
-          <button class="btn-save" @click="saveVoiceSettings()" x-show="voiceSettingsChanged" style="margin-left: 12px;">保存设置</button>
+          <button class="btn-save" @click="saveVoiceSettings()" :disabled="!voiceSettingsChanged" style="margin-left: 12px;">保存设置</button>
+        </div>
+      </div>
+
+      <!-- ===== Quiz Limit Settings ===== -->
+      <div x-show="adminTab === 'quizLimit'" class="content-panel">
+        <h3 class="panel-title">📅 抽查设置</h3>
+
+        <div class="setting-card">
+          <label class="setting-label">限额模式</label>
+          <div class="quiz-limit-mode-btns">
+            <button class="mode-btn" :class="{ active: pendingQuizLimitMode === 'ratio' }" @click="setQuizLimitMode('ratio')">
+              按比例
+            </button>
+            <button class="mode-btn" :class="{ active: pendingQuizLimitMode === 'fixed' }" @click="setQuizLimitMode('fixed')">
+              按固定词数
+            </button>
+          </div>
         </div>
 
-        <p x-show="voiceSettingsChanged" style="text-align: center; color: #fbbf24; font-size: 14px; margin-top: 8px;">有未保存的更改</p>
+        <div class="setting-card" x-show="pendingQuizLimitMode === 'ratio'">
+          <label class="setting-label">抽查比例：<span x-text="pendingQuizLimitValue"></span>%</label>
+          <div class="preset-btns">
+            <template x-for="v in [10, 20, 30, 50, 80, 100]" :key="v">
+              <button class="preset-btn" :class="{ active: pendingQuizLimitValue === v }" @click="setQuizLimitValue(v)" x-text="v + '%'"></button>
+            </template>
+          </div>
+          <div class="custom-input-row">
+            <input type="number" min="1" max="100" x-model.number="pendingQuizLimitValue" class="custom-input" placeholder="自定义比例">
+            <span class="custom-input-unit">%</span>
+          </div>
+        </div>
+
+        <div class="setting-card" x-show="pendingQuizLimitMode === 'fixed'">
+          <label class="setting-label">每日词数：<span x-text="pendingQuizLimitValue"></span> 词</label>
+          <div class="preset-btns">
+            <template x-for="v in [10, 20, 30, 50, 100, 200]" :key="v">
+              <button class="preset-btn" :class="{ active: pendingQuizLimitValue === v }" @click="setQuizLimitValue(v)" x-text="v"></button>
+            </template>
+          </div>
+          <div class="custom-input-row">
+            <input type="number" min="1" max="9999" x-model.number="pendingQuizLimitValue" class="custom-input" placeholder="自定义词数">
+            <span class="custom-input-unit">词</span>
+          </div>
+        </div>
+
+        <div class="setting-card voice-actions" style="text-align: center;">
+          <button class="btn-save" @click="saveQuizLimitSettings()" :disabled="!quizLimitSettingsChanged">保存设置</button>
+        </div>
       </div>
 
       <!-- ===== Word Management ===== -->
       <div x-show="adminTab === 'words'" class="content-panel">
         <h3 class="panel-title">📝 单词管理</h3>
 
-        <!-- Add Word -->
-        <div class="add-form">
-          <input type="text" x-model="newEnglish" placeholder="英文单词" @keydown.enter="addWord()">
-          <input type="text" x-model="newChinese" placeholder="中文意思" @keydown.enter="addWord()">
-          <button class="btn-save" @click="addWord()" :disabled="!newEnglish || !newChinese">添加</button>
+        <!-- Toolbar -->
+        <div class="word-toolbar">
+          <input type="text" x-model="newEnglish" placeholder="英文单词" @keydown.enter="addWord()" class="toolbar-input">
+          <input type="text" x-model="newChinese" placeholder="中文意思" @keydown.enter="addWord()" class="toolbar-input">
+          <button class="btn-add" @click="addWord()" :disabled="!newEnglish || !newChinese">添加</button>
+          <input type="text" x-model="searchQuery" placeholder="🔍 搜索..." @input="onWordSearchInput()" class="toolbar-search">
           <p class="save-msg" x-show="saveMsg" x-text="saveMsg"></p>
         </div>
 
-        <!-- Word List -->
-        <div class="word-list-section">
-          <input type="text" x-model="searchQuery" placeholder="🔍 搜索单词..." class="search-input">
-          <div class="word-list">
-            <template x-for="word in filteredWords" :key="word.id">
-              <div class="word-item">
-                <div class="word-info">
-                  <span class="word-en" x-text="word.english"></span>
-                  <span class="word-zh" x-text="word.chinese"></span>
-                </div>
-                <div class="word-actions">
-                  <button class="btn-sm btn-edit" @click="editWord(word)">编辑</button>
-                  <button class="btn-sm btn-del" @click="deleteWord(word.id)">删除</button>
-                </div>
-              </div>
+        <!-- Word Table -->
+        <div class="word-table-wrapper">
+          <table class="word-table">
+            <thead>
+              <tr>
+                <th class="col-id">#</th>
+                <th class="col-english">英文</th>
+                <th class="col-chinese">中文</th>
+                <th class="col-actions">操作</th>
+              </tr>
+            </thead>
+            <tbody>
+              <template x-for="(word, idx) in wordPageWords" :key="word.id">
+                <tr>
+                  <td class="col-id" x-text="(wordCurrentPage - 1) * wordPageSize + idx + 1"></td>
+                  <td class="col-english" x-text="word.english"></td>
+                  <td class="col-chinese" x-text="word.chinese"></td>
+                  <td class="col-actions">
+                    <button class="btn-sm btn-edit" @click="editWord(word)">编辑</button>
+                    <button class="btn-sm btn-del" @click="deleteWord(word.id)">删除</button>
+                  </td>
+                </tr>
+              </template>
+              <tr x-show="wordPageWords.length === 0">
+                <td colspan="4" class="empty-table-cell">暂无单词</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+
+        <!-- Pagination -->
+        <div class="pagination" x-show="filteredWords.length > 0">
+          <span class="pagination-info" x-text="wordPageInfo"></span>
+          <div class="pagination-buttons">
+            <button class="page-btn" :disabled="wordCurrentPage === 1" @click="wordGoToPage(1)" title="首页">&laquo;</button>
+            <button class="page-btn" :disabled="wordCurrentPage === 1" @click="wordGoToPage(wordCurrentPage - 1)" title="上一页">&lsaquo;</button>
+            <template x-for="p in wordPageNumbers" :key="p">
+              <button class="page-btn" :class="{ active: p === wordCurrentPage }" @click="wordGoToPage(p)" x-text="p"></button>
             </template>
+            <button class="page-btn" :disabled="wordCurrentPage === wordTotalPages" @click="wordGoToPage(wordCurrentPage + 1)" title="下一页">&rsaquo;</button>
+            <button class="page-btn" :disabled="wordCurrentPage === wordTotalPages" @click="wordGoToPage(wordTotalPages)" title="末页">&raquo;</button>
           </div>
         </div>
       </div>
@@ -271,17 +395,15 @@
               <span class="sm2-label">平均难度系数</span>
               <span class="sm2-value" x-text="sm2Overview?.avgEfactor || 0"></span>
             </div>
-            <div class="sm2-stages">
-              <template x-for="stage in sm2Overview?.stageDist || []" :key="stage.stage">
-                <div class="sm2-stage-item">
-                  <span x-text="stage.stage"></span>
-                  <span class="sm2-stage-count" x-text="stage.count"></span>
-                </div>
-              </template>
-            </div>
+            <template x-for="stage in sm2Overview?.stageDist || []" :key="stage.stage">
+              <div class="sm2-stat">
+                <span class="sm2-label" x-text="stage.stage"></span>
+                <span class="sm2-value" x-text="stage.count"></span>
+              </div>
+            </template>
           </div>
           <div class="sm2-word-list">
-            <template x-for="sw in sm2WordStates" :key="sw.id">
+            <template x-for="sw in sm2Paged" :key="sw.id">
               <div class="sm2-word-item">
                 <div class="sm2-word-info">
                   <span class="sm2-word-text" x-text="`${sw.english} (${sw.chinese})`"></span>
@@ -296,11 +418,23 @@
             </template>
           </div>
           <p x-show="sm2WordStates.length === 0" class="empty-hint">暂无数据</p>
+          <div class="pagination" x-show="sm2WordStates.length > 0">
+            <span class="pagination-info" x-text="sm2PageInfo"></span>
+            <div class="pagination-buttons">
+              <button class="page-btn" :disabled="sm2Page === 1" @click="sm2GoPage(1)" title="首页">&laquo;</button>
+              <button class="page-btn" :disabled="sm2Page === 1" @click="sm2GoPage(sm2Page - 1)" title="上一页">&lsaquo;</button>
+              <template x-for="p in sm2PageNums" :key="p">
+                <button class="page-btn" :class="{ active: p === sm2Page }" @click="sm2GoPage(p)" x-text="p"></button>
+              </template>
+              <button class="page-btn" :disabled="sm2Page === sm2TotalPages" @click="sm2GoPage(sm2Page + 1)" title="下一页">&rsaquo;</button>
+              <button class="page-btn" :disabled="sm2Page === sm2TotalPages" @click="sm2GoPage(sm2TotalPages)" title="末页">&raquo;</button>
+            </div>
+          </div>
         </div>
 
         <div x-show="statsTab === 'word'" class="stats-panel">
           <div class="word-stats-list">
-            <template x-for="ws in wordStats" :key="ws.id">
+            <template x-for="ws in wordStatsPaged" :key="ws.id">
               <div class="word-stat-item">
                 <span class="ws-word" x-text="`${ws.english} (${ws.chinese})`"></span>
                 <span class="ws-accuracy" :class="ws.accuracy >= 0.8 ? 'good' : ws.accuracy >= 0.5 ? 'warn' : 'bad'"
@@ -309,10 +443,22 @@
               </div>
             </template>
           </div>
+          <div class="pagination" x-show="wordStats.length > 0">
+            <span class="pagination-info" x-text="wordStatsPageInfo"></span>
+            <div class="pagination-buttons">
+              <button class="page-btn" :disabled="wordStatsPage === 1" @click="wordStatsGoPage(1)" title="首页">&laquo;</button>
+              <button class="page-btn" :disabled="wordStatsPage === 1" @click="wordStatsGoPage(wordStatsPage - 1)" title="上一页">&lsaquo;</button>
+              <template x-for="p in wordStatsPageNums" :key="p">
+                <button class="page-btn" :class="{ active: p === wordStatsPage }" @click="wordStatsGoPage(p)" x-text="p"></button>
+              </template>
+              <button class="page-btn" :disabled="wordStatsPage === wordStatsTotalPages" @click="wordStatsGoPage(wordStatsPage + 1)" title="下一页">&rsaquo;</button>
+              <button class="page-btn" :disabled="wordStatsPage === wordStatsTotalPages" @click="wordStatsGoPage(wordStatsTotalPages)" title="末页">&raquo;</button>
+            </div>
+          </div>
         </div>
 
         <div x-show="statsTab === 'daily'" class="stats-panel">
-          <template x-for="d in dailyStats" :key="d.date">
+          <template x-for="d in dailyStatsPaged" :key="d.date">
             <div class="daily-item">
               <span class="d-date" x-text="d.date"></span>
               <span class="d-count" x-text="`共 ${d.total} 题`"></span>
@@ -320,6 +466,18 @@
             </div>
           </template>
           <p x-show="dailyStats.length === 0" class="empty-hint">暂无数据</p>
+          <div class="pagination" x-show="dailyStats.length > 0">
+            <span class="pagination-info" x-text="dailyStatsPageInfo"></span>
+            <div class="pagination-buttons">
+              <button class="page-btn" :disabled="dailyStatsPage === 1" @click="dailyStatsGoPage(1)" title="首页">&laquo;</button>
+              <button class="page-btn" :disabled="dailyStatsPage === 1" @click="dailyStatsGoPage(dailyStatsPage - 1)" title="上一页">&lsaquo;</button>
+              <template x-for="p in dailyStatsPageNums" :key="p">
+                <button class="page-btn" :class="{ active: p === dailyStatsPage }" @click="dailyStatsGoPage(p)" x-text="p"></button>
+              </template>
+              <button class="page-btn" :disabled="dailyStatsPage === dailyStatsTotalPages" @click="dailyStatsGoPage(dailyStatsPage + 1)" title="下一页">&rsaquo;</button>
+              <button class="page-btn" :disabled="dailyStatsPage === dailyStatsTotalPages" @click="dailyStatsGoPage(dailyStatsTotalPages)" title="末页">&raquo;</button>
+            </div>
+          </div>
         </div>
 
         <div x-show="statsTab === 'trend'" class="stats-panel">
@@ -377,6 +535,9 @@
                   <button class="btn-sm btn-edit" @click="editUser(u)" x-show="u.id !== currentUser?.id">编辑</button>
                   <button class="btn-sm btn-del" @click="deleteUser(u.id)" x-show="u.id !== currentUser?.id">删除</button>
                   <span x-show="u.id === currentUser?.id" class="self-badge">自己</span>
+                  <button class="btn-sm btn-info" :title="`${u.username} 共有 ${userWordCounts[u.id] || 0} 个单词`">
+                    <span x-text="`📚 ${userWordCounts[u.id] || 0} 词`"></span>
+                  </button>
                 </div>
               </div>
             </template>
@@ -387,7 +548,7 @@
   </div>
 
   <!-- Edit Modal -->
-  <div class="edit-modal" x-show="editingWord" @click.self="editingWord = null">
+  <div class="edit-modal" x-show="editingWord" x-cloak @click.self="editingWord = null">
     <div class="edit-form">
       <h3>编辑单词</h3>
       <input type="text" x-model="editEnglish" placeholder="英文">
@@ -400,7 +561,7 @@
   </div>
 
   <!-- Edit User Modal -->
-  <div class="edit-modal" x-show="editingUser" @click.self="editingUser = null">
+  <div class="edit-modal" x-show="editingUser" x-cloak @click.self="editingUser = null">
     <div class="edit-form">
       <h3>编辑用户</h3>
       <input type="text" x-model="editUserUsername" placeholder="用户名">

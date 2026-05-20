@@ -32,6 +32,7 @@ describe('Auth API', () => {
   });
 
   beforeEach(() => {
+    db.exec('DELETE FROM user_preferences');
     db.exec('DELETE FROM quiz_records');
     db.exec('DELETE FROM words');
     db.exec('DELETE FROM users');

@@ -1,5 +1,5 @@
 services:
-  word-quiz:
+  wordy:
     build: .
     ports:
       - "8900:3000"
@@ -8,5 +8,11 @@ services:
       - ./google-credentials.json:/app/google-credentials.json:ro
     environment:
       - GOOGLE_APPLICATION_CREDENTIALS=/app/google-credentials.json
-      - SESSION_SECRET=${SESSION_SECRET:-word-quiz-secret-change-in-production}
+      - SESSION_SECRET=${SESSION_SECRET:-wordy-secret-change-in-production}
+      - TZ=Asia/Shanghai
     restart: unless-stopped
+    labels:
+      - homepage.group=Internet
+      - homepage.name=Wordy
+      - homepage.icon=aboard
+      - homepage.href=https://words.coders.fun:1234/#

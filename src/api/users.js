@@ -68,4 +68,14 @@ router.delete('/:id', (req, res) => {
   res.json({ success: true });
 });
 
+// GET /api/users/:id/words — get user's word count
+router.get('/:id/words', (req, res) => {
+  const id = Number(req.params.id);
+  const user = db.prepare('SELECT id, username FROM users WHERE id = ?').get(id);
+  if (!user) return res.status(404).json({ error: 'User not found' });
+
+  const count = db.prepare('SELECT COUNT(*) as total FROM words WHERE user_id = ?').get(id);
+  res.json({ userId: id, username: user.username, wordCount: count.total });
+});
+
 export default router;
