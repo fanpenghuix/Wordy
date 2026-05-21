@@ -21,6 +21,7 @@ app.use(session({
   secret: process.env.SESSION_SECRET || Math.random().toString(36).slice(2),
   resave: false,
   saveUninitialized: false,
+  cookie: { maxAge: 7 * 24 * 60 * 60 * 1000 }, // 7 days
   store: new session.MemoryStore(),
 }));
 app.use(express.static(path.join(__dirname, '..', 'public')));
