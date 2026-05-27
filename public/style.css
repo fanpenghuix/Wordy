@@ -122,7 +122,7 @@ header h1 {
   height: clamp(16px, 2.5vh, 24px);
   color: #333355;
   cursor: default;
-  transition: all 0.3s ease;
+  transition: color 0.3s ease;
   flex-shrink: 0;
 }
 
@@ -134,11 +134,13 @@ header h1 {
 .progress-star.lit {
   color: #fbbf24;
   text-shadow: 0 0 8px rgba(251, 191, 36, 0.6);
+  animation: starPulseFill 0.4s ease-out;
 }
 
 .progress-star.dimmed {
   color: #ef4444;
   text-shadow: 0 0 6px rgba(239, 68, 68, 0.4);
+  animation: starPulseFill 0.4s ease-out;
 }
 
 .progress-star.current {
@@ -162,6 +164,11 @@ header h1 {
 @keyframes starPulse {
   0%, 100% { transform: scale(1); opacity: 1; }
   50% { transform: scale(1.2); opacity: 0.7; }
+}
+
+@keyframes starPulseFill {
+  0% { transform: scale(1.5); }
+  100% { transform: scale(1); }
 }
 
 .star-overflow {
@@ -326,7 +333,6 @@ header h1 {
 .english.incorrect {
   color: #ef4444;
   text-shadow: 0 0 20px rgba(239, 68, 68, 0.5);
-  animation: shake 0.5s ease-in-out;
 }
 
 .english.correct {
@@ -577,14 +583,12 @@ header h1 {
 
 .fly-star {
   position: fixed;
-  top: 50%;
-  left: 50%;
   width: 48px;
   height: 48px;
   color: #fbbf24;
-  animation: flyToStar 1s ease-in-out forwards;
   z-index: 100000;
   pointer-events: none;
+  transition: left 1s ease-in-out, top 1s ease-in-out, width 1s ease-in-out, height 1s ease-in-out;
 }
 
 .fly-star svg {
@@ -595,26 +599,10 @@ header h1 {
 
 .fly-star.wrong {
   color: #ef4444;
-  width: 36px;
-  height: 36px;
 }
 
 .fly-star.wrong svg {
   filter: drop-shadow(0 0 8px rgba(239, 68, 68, 0.8));
-}
-
-@keyframes flyToStar {
-  0% {
-    transform: translate(0, 0) scale(1);
-    opacity: 1;
-  }
-  60% {
-    opacity: 1;
-  }
-  100% {
-    transform: translate(var(--tx, 0), var(--ty, 0)) scale(0.15);
-    opacity: 0;
-  }
 }
 
 /* ===== Quiz complete overlay ===== */
@@ -750,6 +738,32 @@ header h1 {
 }
 
 .btn-retry:hover { transform: scale(1.05); }
+
+.complete-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  align-items: center;
+  margin-top: clamp(12px, 2vh, 24px);
+  animation: slideUp 0.4s ease-out 0.6s both;
+}
+
+.btn-go-back {
+  background: transparent;
+  color: rgba(255, 255, 255, 0.7);
+  border: 1px solid rgba(255, 255, 255, 0.3);
+  padding: clamp(10px, 2vh, 14px) clamp(24px, 4vw, 40px);
+  border-radius: 25px;
+  font-size: clamp(14px, 2.5vh, 18px);
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.btn-go-back:hover {
+  background: rgba(255, 255, 255, 0.1);
+  color: white;
+  border-color: rgba(255, 255, 255, 0.5);
+}
 
 .accuracy-display {
   margin: clamp(12px, 3vh, 24px) auto;

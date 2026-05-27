@@ -30,6 +30,10 @@ function quizApp() {
     showFeedback: false,
     _quizInitialized: false,
     _showFlyStar: false,
+    flyTarget: { x: -100, y: -100 },
+    flyStarLeft: 0,
+    flyStarTop: 0,
+    flyStarSize: 48,
     _flyStarTarget: null,
     _isCorrectAnswer: true,
 
@@ -438,6 +442,25 @@ function quizApp() {
       this.loading = false;
     },
 
+    goBackFromComplete() {
+      this.quizComplete = false;
+      this.quizWords = [];
+      this.quizResults = [];
+      this.currentIndex = 0;
+      this.currentWord = null;
+      this.revealed = false;
+      this.answered = false;
+      this.showNext = false;
+      this.showFeedback = false;
+      this.hintRevealed = false;
+      this.spellHint = '';
+      this._quizInitialized = false;
+      // Reset to root hash without triggering hashchange
+      if (location.hash !== '#' && location.hash !== '#/' && location.hash !== '') {
+        history.pushState(null, '', '#/');
+      }
+    },
+
     reveal() {
       this.revealed = true;
       this.markWrong = false;
@@ -452,52 +475,12 @@ function quizApp() {
       this.answered = true;
       this.showNext = false;
       await this.recordAnswer(1);
-      // Trigger fly-to-star animation
-      this._showFlyStar = true;
-      this._isCorrectAnswer = true;
-      this._flyStarTarget = null;
-      this._computeFlyStarTarget();
-      // Update results after animation completes
+      await this._doFlyStar(1);
       setTimeout(() => {
         this.quizResults[this.currentIndex] = 1;
         this._showFlyStar = false;
         this.showNext = true;
-      }, 1200);
-    },
-
-    _computeFlyStarTarget() {
-      this.$nextTick(() => {
-        // Find the target star element in the progress bar
-        const stars = document.querySelectorAll('.progress-star');
-        // Use currentIndex within visible range, or the overflow span
-        const visibleIdx = Math.min(this.currentIndex, this.MAX_VISIBLE_STARS - 1);
-        const target = stars[visibleIdx];
-        if (target) {
-          const rect = target.getBoundingClientRect();
-          const cx = rect.left + rect.width / 2;
-          const cy = rect.top + rect.height / 2;
-          this._flyStarTarget = { x: cx, y: cy };
-        } else {
-          // Fallback: overflow span
-          const overflow = document.querySelector('.star-overflow');
-          if (overflow) {
-            const rect = overflow.getBoundingClientRect();
-            this._flyStarTarget = {
-              x: rect.left + rect.width / 2,
-              y: rect.top + rect.height / 2,
-            };
-          }
-        }
-      });
-    },
-
-    get flyStarStyle() {
-      if (!this._flyStarTarget) return '';
-      const cx = window.innerWidth / 2;
-      const cy = window.innerHeight / 2;
-      const dx = this._flyStarTarget.x - cx;
-      const dy = this._flyStarTarget.y - cy;
-      return `--tx: ${dx}px; --ty: ${dy}px;`;
+      }, 1000);
     },
 
     async markIncorrect() {
@@ -506,17 +489,49 @@ function quizApp() {
       this.answered = true;
       this.showNext = false;
       await this.recordAnswer(0);
-      // Trigger fly-to-star animation for wrong answer
-      this._showFlyStar = true;
-      this._isCorrectAnswer = false;
-      this._flyStarTarget = null;
-      this._computeFlyStarTarget();
-      // Update results after animation completes
+      await this._doFlyStar(0);
       setTimeout(() => {
         this.quizResults[this.currentIndex] = 0;
         this._showFlyStar = false;
         this.showNext = true;
-      }, 1200);
+      }, 1000);
+    },
+
+    async _doFlyStar(correct) {
+      // Set starting position (center of viewport), full size
+      this.flyStarLeft = window.innerWidth / 2;
+      this.flyStarTop = window.innerHeight / 2;
+      this.flyStarSize = 48;
+      this._showFlyStar = true;
+      // Wait for element to render at starting position
+      await this.$nextTick();
+      await new Promise(r => requestAnimationFrame(r));
+      // Now set target to trigger CSS transition
+      const stars = document.querySelectorAll('.progress-star');
+      const target = stars[this.currentIndex];
+      if (!target) return;
+      const rect = target.getBoundingClientRect();
+      const tx = rect.left + rect.width / 2;
+      const ty = rect.top + rect.height / 2;
+      const targetSize = parseFloat(getComputedStyle(target).width);
+      this.flyTarget = { x: tx, y: ty };
+      this.flyStarLeft = tx;
+      this.flyStarTop = ty;
+      this.flyStarSize = targetSize;
+    },
+
+    async markIncorrect() {
+      this.isCorrect = false;
+      this.markWrong = true;
+      this.answered = true;
+      this.showNext = false;
+      await this.recordAnswer(0);
+      await this._doFlyStar(0);
+      setTimeout(() => {
+        this.quizResults[this.currentIndex] = 0;
+        this._showFlyStar = false;
+        this.showNext = true;
+      }, 1100);
     },
 
     async recordAnswer(correct) {
