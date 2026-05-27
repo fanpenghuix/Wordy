@@ -115,7 +115,7 @@
       <p>准备中...</p>
     </div>
 
-    <div class="quiz-card" x-show="quizWords.length > 0 && currentWord && !loading">
+    <div class="quiz-card" x-show="quizWords.length > 0 && currentWord && !loading && !quizComplete">
       <!-- Normal mode: show Chinese -->
       <div class="quiz-word-area" x-show="!revealed && !spellMode" x-cloak>
         <p class="chinese" x-text="currentWord?.chinese"></p>
@@ -170,6 +170,7 @@
            :style="`left:${flyStarLeft - flyStarSize / 2}px; top:${flyStarTop - flyStarSize / 2}px; width:${flyStarSize}px; height:${flyStarSize}px;`">
         <svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"/></svg>
       </div>
+    </div>
 
     <!-- Quiz complete overlay -->
     <div class="feedback-overlay complete-overlay" x-show="quizComplete" x-transition:enter="transition ease-out duration-300" x-transition:enter-start="opacity-0" x-transition:enter-end="opacity-100">
