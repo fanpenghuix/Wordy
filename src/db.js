@@ -116,7 +116,11 @@ db.exec(`CREATE INDEX IF NOT EXISTS idx_sm2_reviews_next_review ON sm2_reviews(n
 // Migration: add pre_today_state column for same-day dedup
 try {
   db.exec(`ALTER TABLE sm2_reviews ADD COLUMN pre_today_state TEXT`);
-} catch {
+} catch (e) {
+  if (!e.message.includes('duplicate column name') &&
+      !e.message.includes('already exists')) {
+    throw e;
+  }
   // Column already exists — migration already applied
 }
 
