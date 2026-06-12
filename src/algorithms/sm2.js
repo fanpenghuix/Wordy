@@ -13,7 +13,9 @@ function addDays(dateStr, days) {
  * Closer reviews have higher chance but all have a shot.
  */
 function weightedRandomSample(candidates, count) {
-  if (candidates.length <= count) return candidates;
+  if (candidates.length <= count) {
+    return candidates.map(({ days_until, ...clean }) => clean);
+  }
 
   // Assign weights: closer = higher weight
   const weighted = candidates.map(c => ({
