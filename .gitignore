@@ -5,3 +5,6 @@ data-*
 .superpowers/
 google-credentials.json
 docker-compose.override.yml
+
+# Database backups
+data/backups/
