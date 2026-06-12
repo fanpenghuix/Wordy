@@ -113,6 +113,13 @@ db.exec(`
 `);
 db.exec(`CREATE INDEX IF NOT EXISTS idx_sm2_reviews_next_review ON sm2_reviews(next_review)`);
 
+// Migration: add pre_today_state column for same-day dedup
+try {
+  db.exec(`ALTER TABLE sm2_reviews ADD COLUMN pre_today_state TEXT`);
+} catch {
+  // Column already exists — migration already applied
+}
+
 // Today's quiz session (persists word order and results across refreshes)
 db.exec(`
   CREATE TABLE IF NOT EXISTS quiz_session (
