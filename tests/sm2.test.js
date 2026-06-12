@@ -42,26 +42,28 @@ describe('SM-2 Algorithm', () => {
       cleanup(userId);
     });
 
-    it('second correct: interval=3, repetitions=2', () => {
+    it('second correct on same day: deduped to first review result', () => {
       const { userId, wordId } = setupUserWord('sm2_c2', 'c2', '正确2');
       initSm2Review(userId, wordId);
       recordResult(userId, wordId, true);
       recordResult(userId, wordId, true);
       const state = db.prepare('SELECT * FROM sm2_reviews WHERE user_id = ? AND word_id = ?').get(userId, wordId);
-      expect(state.repetitions).toBe(2);
-      expect(state.interval).toBe(3);
+      // Same-day dedup: second review recalculates from pre-today state, so still interval=1, rep=1
+      expect(state.repetitions).toBe(1);
+      expect(state.interval).toBe(1);
       cleanup(userId);
     });
 
-    it('third+ correct: interval = Math.round(interval * efactor)', () => {
+    it('third+ correct on same day: all deduped to first review', () => {
       const { userId, wordId } = setupUserWord('sm2_c3', 'c3', '正确3');
       initSm2Review(userId, wordId);
       recordResult(userId, wordId, true);
       recordResult(userId, wordId, true);
       recordResult(userId, wordId, true);
       const state = db.prepare('SELECT * FROM sm2_reviews WHERE user_id = ? AND word_id = ?').get(userId, wordId);
-      expect(state.repetitions).toBe(3);
-      expect(state.interval).toBe(5); // Math.min(Math.round(3 * 2.5), 5) = 5
+      // Same-day dedup: all collapse to first review from pre-today state
+      expect(state.repetitions).toBe(1);
+      expect(state.interval).toBe(1);
       cleanup(userId);
     });
 
@@ -92,12 +94,14 @@ describe('SM-2 Algorithm', () => {
       cleanup(userId);
     });
 
-    it('efactor minimum is 1.3', () => {
+    it('efactor decreases on first wrong of the day', () => {
       const { userId, wordId } = setupUserWord('sm2_ef', 'ef', '系数');
       initSm2Review(userId, wordId);
+      // First wrong: efactor 2.5 -> 2.3; subsequent same-day wrongs are deduped
       for (let i = 0; i < 10; i++) recordResult(userId, wordId, false);
       const state = db.prepare('SELECT * FROM sm2_reviews WHERE user_id = ? AND word_id = ?').get(userId, wordId);
-      expect(state.efactor).toBe(1.3);
+      // Same-day dedup: all wrongs recalculate from pre-today {0, 2.5, 0}, so efactor = max(1.3, 2.5-0.2) = 2.3
+      expect(state.efactor).toBe(2.3);
       cleanup(userId);
     });
   });
@@ -108,14 +112,66 @@ describe('SM-2 Algorithm', () => {
       const u2 = setupUserWord('sm2_u2', 'iso2', '隔离2');
       initSm2Review(u1.userId, u1.wordId);
       initSm2Review(u2.userId, u2.wordId);
+      // u1: correct once (same-day dedup means only first review counts)
       for (let i = 0; i < 3; i++) recordResult(u1.userId, u1.wordId, true);
       recordResult(u2.userId, u2.wordId, false);
       const s1 = db.prepare('SELECT * FROM sm2_reviews WHERE user_id = ?').get(u1.userId);
       const s2 = db.prepare('SELECT * FROM sm2_reviews WHERE user_id = ?').get(u2.userId);
-      expect(s1.repetitions).toBe(3);
+      // u1: deduped to first correct -> rep=1; u2: wrong -> rep=0
+      expect(s1.repetitions).toBe(1);
       expect(s2.repetitions).toBe(0);
       cleanup(u1.userId);
       cleanup(u2.userId);
+    });
+  });
+
+  describe('same-day dedup', () => {
+    it('second correct on same day does not grow interval further', () => {
+      const { userId, wordId } = setupUserWord('sm2_sd1', 'sd1', '同日1');
+      initSm2Review(userId, wordId);
+      // First review: interval 0 → 1
+      recordResult(userId, wordId, true);
+      let state = db.prepare('SELECT * FROM sm2_reviews WHERE user_id = ? AND word_id = ?').get(userId, wordId);
+      expect(state.interval).toBe(1);
+
+      // Second review same day (correct again): should still be interval 1
+      recordResult(userId, wordId, true);
+      state = db.prepare('SELECT * FROM sm2_reviews WHERE user_id = ? AND word_id = ?').get(userId, wordId);
+      expect(state.interval).toBe(1);
+      cleanup(userId);
+    });
+
+    it('second wrong on same day resets from pre-today state', () => {
+      const { userId, wordId } = setupUserWord('sm2_sd2', 'sd2', '同日2');
+      initSm2Review(userId, wordId);
+      // First review: correct, interval 0 → 1
+      recordResult(userId, wordId, true);
+      let state = db.prepare('SELECT * FROM sm2_reviews WHERE user_id = ? AND word_id = ?').get(userId, wordId);
+      expect(state.interval).toBe(1);
+      expect(state.repetitions).toBe(1);
+
+      // Second review same day (wrong): reset from pre-today state
+      recordResult(userId, wordId, false);
+      state = db.prepare('SELECT * FROM sm2_reviews WHERE user_id = ? AND word_id = ?').get(userId, wordId);
+      expect(state.interval).toBe(0);
+      expect(state.repetitions).toBe(0);
+      expect(state.next_review).toBe(new Date().toISOString().slice(0, 10));
+      cleanup(userId);
+    });
+
+    it('multiple reviews on same day: always uses pre-today state', () => {
+      const { userId, wordId } = setupUserWord('sm2_sd3', 'sd3', '同日3');
+      initSm2Review(userId, wordId);
+      // First: correct → interval=1
+      recordResult(userId, wordId, true);
+      // Second: wrong → reset to interval=0
+      recordResult(userId, wordId, false);
+      // Third: correct → from pre-today state (interval=0, rep=0) → interval=1
+      recordResult(userId, wordId, true);
+      const state = db.prepare('SELECT * FROM sm2_reviews WHERE user_id = ? AND word_id = ?').get(userId, wordId);
+      expect(state.interval).toBe(1);
+      expect(state.repetitions).toBe(1);
+      cleanup(userId);
     });
   });
 });

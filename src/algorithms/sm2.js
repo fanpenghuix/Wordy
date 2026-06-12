@@ -38,6 +38,22 @@ export function recordResult(userId, wordId, correct, hard = false) {
 
   let { interval, efactor, repetitions } = review;
 
+  // Same-day dedup: if already reviewed today, restore pre-today state
+  if (review.last_review === t) {
+    if (review.pre_today_state) {
+      const prev = JSON.parse(review.pre_today_state);
+      interval = prev.interval;
+      efactor = prev.efactor;
+      repetitions = prev.repetitions;
+    }
+  } else {
+    // First review today: save current state as pre_today_state
+    db.prepare(`
+      UPDATE sm2_reviews SET pre_today_state = ?
+      WHERE user_id = ? AND word_id = ?
+    `).run(JSON.stringify({ interval, efactor, repetitions }), userId, wordId);
+  }
+
   if (correct) {
     if (repetitions === 0) interval = 1;
     else if (repetitions === 1) interval = hard ? 2 : 3;
