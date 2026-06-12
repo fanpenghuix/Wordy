@@ -41,10 +41,14 @@ export function recordResult(userId, wordId, correct, hard = false) {
   // Same-day dedup: if already reviewed today, restore pre-today state
   if (review.last_review === t) {
     if (review.pre_today_state) {
-      const prev = JSON.parse(review.pre_today_state);
-      interval = prev.interval;
-      efactor = prev.efactor;
-      repetitions = prev.repetitions;
+      try {
+        const prev = JSON.parse(review.pre_today_state);
+        interval = prev.interval;
+        efactor = prev.efactor;
+        repetitions = prev.repetitions;
+      } catch {
+        // Malformed JSON -- treat as no dedup data, continue with current state
+      }
     }
   } else {
     // First review today: save current state as pre_today_state
