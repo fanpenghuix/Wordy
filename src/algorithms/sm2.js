@@ -8,6 +8,45 @@ function addDays(dateStr, days) {
   return d.toISOString().slice(0, 10);
 }
 
+/**
+ * Weighted random sample: picks `count` items where weight = 1 / (daysUntil + 1).
+ * Closer reviews have higher chance but all have a shot.
+ */
+function weightedRandomSample(candidates, count) {
+  if (candidates.length <= count) return candidates;
+
+  // Assign weights: closer = higher weight
+  const weighted = candidates.map(c => ({
+    ...c,
+    weight: 1 / (Math.max(0, c.days_until) + 1),
+  }));
+
+  const selected = [];
+  const remaining = [...weighted];
+
+  for (let i = 0; i < count; i++) {
+    const totalWeight = remaining.reduce((sum, c) => sum + c.weight, 0);
+    let rand = Math.random() * totalWeight;
+    let chosenIndex = 0;
+
+    for (let j = 0; j < remaining.length; j++) {
+      rand -= remaining[j].weight;
+      if (rand <= 0) {
+        chosenIndex = j;
+        break;
+      }
+    }
+
+    const chosen = remaining[chosenIndex];
+    // Remove weight-related fields from output
+    const { weight, days_until, ...clean } = chosen;
+    selected.push(clean);
+    remaining.splice(chosenIndex, 1);
+  }
+
+  return selected;
+}
+
 export function initSm2Review(userId, wordId) {
   const t = today();
   db.prepare(`
@@ -120,29 +159,22 @@ function getDueWords(userId, limit) {
     LIMIT ?
   `).all(t, userId, userId, remaining) : [];
 
-  // If still under dailyLimit, fill with earliest upcoming reviews
+  // If still under dailyLimit, fill with weighted random from upcoming reviews
   const fetched = dueWords.length + newWords.length;
   const extra = Math.max(0, dailyLimit - fetched);
   const existingIds = fetched > 0 ? [...dueWords, ...newWords].map(w => w.id) : [];
-  const extraWords = extra > 0 && existingIds.length > 0 ? db.prepare(`
+  const placeholder = existingIds.length > 0 ? `AND w.id NOT IN (${existingIds.join(',')})` : '';
+
+  const candidates = extra > 0 ? db.prepare(`
     SELECT w.*, s.interval, s.efactor, s.repetitions, s.next_review,
-           CASE WHEN s.last_review IS NULL OR s.repetitions = 0 THEN 1 ELSE 0 END as is_wrong
+           CASE WHEN s.last_review IS NULL OR s.repetitions = 0 THEN 1 ELSE 0 END as is_wrong,
+           CAST(julianday(s.next_review) - julianday(?) AS INTEGER) as days_until
     FROM words w
     JOIN sm2_reviews s ON w.id = s.word_id AND w.user_id = s.user_id
-    WHERE s.user_id = ?
-      AND s.next_review > ?
-      AND w.id NOT IN (${existingIds.join(',')})
-    ORDER BY s.next_review ASC
-    LIMIT ?
-  `).all(userId, t, extra) : extra > 0 ? db.prepare(`
-    SELECT w.*, s.interval, s.efactor, s.repetitions, s.next_review,
-           CASE WHEN s.last_review IS NULL OR s.repetitions = 0 THEN 1 ELSE 0 END as is_wrong
-    FROM words w
-    JOIN sm2_reviews s ON w.id = s.word_id AND w.user_id = s.user_id
-    WHERE s.user_id = ? AND s.next_review > ?
-    ORDER BY s.next_review ASC
-    LIMIT ?
-  `).all(userId, t, extra) : [];
+    WHERE s.user_id = ? AND s.next_review > ? ${placeholder}
+  `).all(t, userId, t) : [];
+
+  const extraWords = weightedRandomSample(candidates, extra);
 
   const allWords = [...dueWords, ...newWords, ...extraWords];
   // Randomize order so repeated quizzes aren't predictable

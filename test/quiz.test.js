@@ -54,6 +54,7 @@ describe('Quiz API (SM-2)', () => {
   });
 
   beforeEach(() => {
+    db.exec('DELETE FROM quiz_session');
     db.exec('DELETE FROM quiz_records');
     db.exec('DELETE FROM sm2_reviews WHERE user_id = 1');
     db.exec('DELETE FROM words');
@@ -69,6 +70,13 @@ describe('Quiz API (SM-2)', () => {
 
     it('should always include new words (no sm2_reviews entry)', async () => {
       const today = new Date().toISOString().slice(0, 10);
+      const future = new Date(Date.now() + 86400000 * 5).toISOString().slice(0, 10);
+      // Add words with future reviews (not due) so dailyLimit (20% of 10 = 2) is > dueWords count
+      for (let i = 1; i <= 8; i++) {
+        const w = addWord(`filled${i}`, `填充${i}`, '2026-01-01');
+        initSm2Review(w.lastInsertRowid, future);
+      }
+      // New words (no sm2_reviews) — should be included in remaining slots
       addWord('new1', '新词1', today);
       addWord('new2', '新词2', today);
 
@@ -80,16 +88,22 @@ describe('Quiz API (SM-2)', () => {
     });
 
     it('should include due words from sm2_reviews', async () => {
-      // Add enough words so dailyLimit (20%) covers both
-      for (let i = 1; i <= 10; i++) {
-        addWord(`due${i}`, `到期${i}`, '2026-01-01');
-      }
-      // Mark first two as due
-      const dueWords = db.prepare('SELECT id FROM words WHERE user_id = 1').all();
+      // Add enough words so dailyLimit (20%) covers both due words
       const today = new Date().toISOString().slice(0, 10);
-      for (const w of dueWords.slice(0, 2)) {
-        initSm2Review(w.id, today);
-        setSm2Due(w.id, 1, 1);
+      const future = new Date(Date.now() + 86400000 * 3).toISOString().slice(0, 10);
+
+      // Due words (next_review = today)
+      const w1 = addWord('due1', '到期1', '2026-01-01');
+      const w2 = addWord('due2', '到期2', '2026-01-01');
+      initSm2Review(w1.lastInsertRowid, today);
+      setSm2Due(w1.lastInsertRowid, 1, 1);
+      initSm2Review(w2.lastInsertRowid, today);
+      setSm2Due(w2.lastInsertRowid, 1, 1);
+
+      // Non-due words (future review dates) to pad dailyLimit
+      for (let i = 3; i <= 10; i++) {
+        const w = addWord(`due${i}`, `到期${i}`, '2026-01-01');
+        initSm2Review(w.lastInsertRowid, future);
       }
 
       const res = await request(testApp).get('/api/quiz/today');
@@ -102,6 +116,15 @@ describe('Quiz API (SM-2)', () => {
     it('should not include non-due words', async () => {
       const today = new Date().toISOString().slice(0, 10);
       const future = new Date(Date.now() + 86400000).toISOString().slice(0, 10);
+
+      // Add due words to fill the dailyLimit (10 words * 20% = 2)
+      for (let i = 1; i <= 5; i++) {
+        const w = addWord(`due${i}`, `到期${i}`, '2026-01-01');
+        initSm2Review(w.lastInsertRowid, today);
+        setSm2Due(w.lastInsertRowid, 1, 1);
+      }
+
+      // Non-due word (should not appear)
       const w = addWord('notdue', '未到期', '2026-01-01');
       initSm2Review(w.lastInsertRowid, future);
 
@@ -126,6 +149,34 @@ describe('Quiz API (SM-2)', () => {
       if (words.length >= 2) {
         expect(words[0].english).toBe('wrong');
       }
+    });
+
+    it('extra fill should vary words across sessions (weighted random)', async () => {
+      // Create 50 words, all with sm2_reviews, none due today
+      // dailyLimit = ceil(50 * 0.20) = 10 words (default 20% ratio, no preferences set)
+      const future = new Date(Date.now() + 86400000 * 3).toISOString().slice(0, 10);
+      for (let i = 0; i < 50; i++) {
+        const w = addWord(`rand${i}`, `随机${i}`, '2026-01-01');
+        db.prepare(`
+          INSERT INTO sm2_reviews (user_id, word_id, interval, efactor, repetitions, next_review)
+          VALUES (1, ?, 3, 2.5, 2, ?)
+        `).run(w.lastInsertRowid, future);
+      }
+
+      // Fetch today's quiz multiple times, collect unique words seen
+      const allWords = new Set();
+      for (let i = 0; i < 5; i++) {
+        const res = await request(testApp).get('/api/quiz/today');
+        expect(res.status).toBe(200);
+        res.body.words.forEach(w => allWords.add(w.english));
+        // Clear session so next call generates new words
+        db.exec("DELETE FROM quiz_session");
+      }
+
+      // With weighted random, across 5 sessions of 10 words each (50 total picks),
+      // we should see significantly more than 10 unique words out of 50
+      // With pure ASC ordering, we'd only see the same 10 words every time
+      expect(allWords.size).toBeGreaterThan(15);
     });
   });
 
