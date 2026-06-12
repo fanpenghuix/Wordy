@@ -9,7 +9,10 @@ const { default: db } = await import('../src/db.js');
 import quizRouter from '../src/api/quiz.js';
 import request from 'supertest';
 
-function createTestApp(userId = 1) {
+// Use a dedicated test user that won't conflict with other test files
+const TEST_USER_ID = 9999;
+
+function createTestApp(userId = TEST_USER_ID) {
   const app = express();
   app.use(express.json());
   app.use(session({
@@ -28,17 +31,17 @@ function createTestApp(userId = 1) {
   return app;
 }
 
-const testApp = createTestApp(1);
+const testApp = createTestApp(TEST_USER_ID);
 
 function addWord(english, chinese, date) {
   return db.prepare('INSERT INTO words (english, chinese, created_at, user_id) VALUES (?, ?, ?, ?)')
-    .run(english, chinese, date || '2026-05-09', 1);
+    .run(english, chinese, date || '2026-05-09', TEST_USER_ID);
 }
 
 function initSm2Review(wordId, nextReview) {
   db.prepare(`
     INSERT INTO sm2_reviews (user_id, word_id, interval, efactor, repetitions, next_review)
-    VALUES (1, ?, 0, 2.5, 0, ?)
+    VALUES (${TEST_USER_ID}, ?, 0, 2.5, 0, ?)
   `).run(wordId, nextReview || '2026-01-01');
 }
 
@@ -50,14 +53,14 @@ function setSm2Due(wordId, interval, repetitions) {
 
 describe('Quiz API (SM-2)', () => {
   beforeAll(() => {
-    db.exec(`INSERT OR IGNORE INTO users (id, username, password_hash, role) VALUES (1, 'testuser', 'dummy', 'user')`);
+    db.prepare(`INSERT OR IGNORE INTO users (id, username, password_hash, role) VALUES (?, 'testuser', 'dummy', 'user')`).run(TEST_USER_ID);
   });
 
   beforeEach(() => {
     db.exec('DELETE FROM quiz_session');
     db.exec('DELETE FROM quiz_records');
-    db.exec('DELETE FROM sm2_reviews WHERE user_id = 1');
-    db.exec('DELETE FROM words');
+    db.exec(`DELETE FROM sm2_reviews WHERE user_id = ${TEST_USER_ID}`);
+    db.exec(`DELETE FROM words WHERE user_id = ${TEST_USER_ID}`);
     db.exec("DELETE FROM sqlite_sequence WHERE name IN ('words', 'quiz_records', 'sm2_reviews')");
   });
 
@@ -159,7 +162,7 @@ describe('Quiz API (SM-2)', () => {
         const w = addWord(`rand${i}`, `随机${i}`, '2026-01-01');
         db.prepare(`
           INSERT INTO sm2_reviews (user_id, word_id, interval, efactor, repetitions, next_review)
-          VALUES (1, ?, 3, 2.5, 2, ?)
+          VALUES (${TEST_USER_ID}, ?, 3, 2.5, 2, ?)
         `).run(w.lastInsertRowid, future);
       }
 
