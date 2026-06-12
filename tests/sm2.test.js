@@ -61,7 +61,18 @@ describe('SM-2 Algorithm', () => {
       recordResult(userId, wordId, true);
       const state = db.prepare('SELECT * FROM sm2_reviews WHERE user_id = ? AND word_id = ?').get(userId, wordId);
       expect(state.repetitions).toBe(3);
-      expect(state.interval).toBe(8); // Math.round(3 * 2.5) = 8
+      expect(state.interval).toBe(5); // Math.min(Math.round(3 * 2.5), 5) = 5
+      cleanup(userId);
+    });
+
+    it('caps interval at MAX_INTERVAL (5 days)', () => {
+      const { userId, wordId } = setupUserWord('sm2_cap', 'cap', '上限');
+      initSm2Review(userId, wordId);
+      for (let i = 0; i < 15; i++) {
+        recordResult(userId, wordId, true);
+      }
+      const state = db.prepare('SELECT * FROM sm2_reviews WHERE user_id = ? AND word_id = ?').get(userId, wordId);
+      expect(state.interval).toBeLessThanOrEqual(5);
       cleanup(userId);
     });
   });

@@ -49,6 +49,10 @@ export function recordResult(userId, wordId, correct, hard = false) {
     efactor = Math.max(1.3, efactor - (hard ? 0.35 : 0.2));
   }
 
+  // Cap interval for small vocabularies — no word disappears for more than 5 days
+  const MAX_INTERVAL = 5;
+  interval = Math.min(interval, MAX_INTERVAL);
+
   const nextReview = correct ? addDays(t, interval) : t;
 
   db.prepare(`
