@@ -143,7 +143,16 @@ function getDueWords(userId, limit) {
   const t = today();
   const dailyLimit = limit ?? getUserQuizLimit(userId);
 
-  const dueWords = db.prepare(`
+  // Step 1: Always include new words (not yet in sm2_reviews) — they MUST be quizzed today
+  const newWords = db.prepare(`
+    SELECT w.*, 0 as interval, 2.5 as efactor, 0 as repetitions, ? as next_review, 0 as is_wrong
+    FROM words w
+    WHERE w.user_id = ? AND w.id NOT IN (SELECT word_id FROM sm2_reviews WHERE user_id = ?)
+  `).all(t, userId, userId);
+
+  // Step 2: Fill remaining slots with due words
+  const remainingAfterNew = Math.max(0, dailyLimit - newWords.length);
+  const dueWords = remainingAfterNew > 0 ? db.prepare(`
     SELECT w.*, s.interval, s.efactor, s.repetitions, s.next_review,
            CASE WHEN s.last_review IS NULL OR s.repetitions = 0 THEN 1 ELSE 0 END as is_wrong
     FROM words w
@@ -151,20 +160,14 @@ function getDueWords(userId, limit) {
     WHERE s.user_id = ? AND s.next_review <= ?
     ORDER BY is_wrong DESC, s.next_review ASC
     LIMIT ?
-  `).all(userId, t, dailyLimit);
+  `).all(userId, t, remainingAfterNew) : [];
 
-  const remaining = Math.max(0, dailyLimit - dueWords.length);
-  const newWords = remaining > 0 ? db.prepare(`
-    SELECT w.*, 0 as interval, 2.5 as efactor, 0 as repetitions, ? as next_review, 0 as is_wrong
-    FROM words w
-    WHERE w.user_id = ? AND w.id NOT IN (SELECT word_id FROM sm2_reviews WHERE user_id = ?)
-    LIMIT ?
-  `).all(t, userId, userId, remaining) : [];
-
-  // If still under dailyLimit, fill with weighted random from upcoming reviews
+  // Step 3: If still under dailyLimit, fill with weighted random from upcoming reviews
   const fetched = dueWords.length + newWords.length;
   const extra = Math.max(0, dailyLimit - fetched);
-  const existingIds = fetched > 0 ? [...dueWords, ...newWords].map(w => w.id) : [];
+  const newWordIds = newWords.length > 0 ? newWords.map(w => w.id) : [];
+  const dueWordIds = dueWords.length > 0 ? dueWords.map(w => w.id) : [];
+  const existingIds = [...newWordIds, ...dueWordIds];
   const placeholder = existingIds.length > 0 ? `AND w.id NOT IN (${existingIds.join(',')})` : '';
 
   const candidates = extra > 0 ? db.prepare(`
@@ -178,7 +181,7 @@ function getDueWords(userId, limit) {
 
   const extraWords = weightedRandomSample(candidates, extra);
 
-  const allWords = [...dueWords, ...newWords, ...extraWords];
+  const allWords = [...newWords, ...dueWords, ...extraWords];
   // Randomize order so repeated quizzes aren't predictable
   return allWords.sort(() => Math.random() - 0.5);
 }
