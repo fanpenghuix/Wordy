@@ -8,3 +8,4 @@ docker-compose.override.yml
 
 # Database backups
 data/backups/
+.claude/
