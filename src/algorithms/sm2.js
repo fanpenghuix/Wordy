@@ -8,6 +8,47 @@ function addDays(dateStr, days) {
   return d.toISOString().slice(0, 10);
 }
 
+/**
+ * Weighted random sample: picks `count` items where weight = 1 / (daysUntil + 1).
+ * Closer reviews have higher chance but all have a shot.
+ */
+function weightedRandomSample(candidates, count) {
+  if (candidates.length <= count) {
+    return candidates.map(({ days_until, ...clean }) => clean);
+  }
+
+  // Assign weights: closer = higher weight
+  const weighted = candidates.map(c => ({
+    ...c,
+    weight: 1 / (Math.max(0, c.days_until) + 1),
+  }));
+
+  const selected = [];
+  const remaining = [...weighted];
+
+  for (let i = 0; i < count; i++) {
+    const totalWeight = remaining.reduce((sum, c) => sum + c.weight, 0);
+    let rand = Math.random() * totalWeight;
+    let chosenIndex = 0;
+
+    for (let j = 0; j < remaining.length; j++) {
+      rand -= remaining[j].weight;
+      if (rand <= 0) {
+        chosenIndex = j;
+        break;
+      }
+    }
+
+    const chosen = remaining[chosenIndex];
+    // Remove weight-related fields from output
+    const { weight, days_until, ...clean } = chosen;
+    selected.push(clean);
+    remaining.splice(chosenIndex, 1);
+  }
+
+  return selected;
+}
+
 export function initSm2Review(userId, wordId) {
   const t = today();
   db.prepare(`
@@ -38,6 +79,26 @@ export function recordResult(userId, wordId, correct, hard = false) {
 
   let { interval, efactor, repetitions } = review;
 
+  // Same-day dedup: if already reviewed today, restore pre-today state
+  if (review.last_review === t) {
+    if (review.pre_today_state) {
+      try {
+        const prev = JSON.parse(review.pre_today_state);
+        interval = prev.interval;
+        efactor = prev.efactor;
+        repetitions = prev.repetitions;
+      } catch {
+        // Malformed JSON -- treat as no dedup data, continue with current state
+      }
+    }
+  } else {
+    // First review today: save current state as pre_today_state
+    db.prepare(`
+      UPDATE sm2_reviews SET pre_today_state = ?
+      WHERE user_id = ? AND word_id = ?
+    `).run(JSON.stringify({ interval, efactor, repetitions }), userId, wordId);
+  }
+
   if (correct) {
     if (repetitions === 0) interval = 1;
     else if (repetitions === 1) interval = hard ? 2 : 3;
@@ -48,6 +109,10 @@ export function recordResult(userId, wordId, correct, hard = false) {
     interval = 0;
     efactor = Math.max(1.3, efactor - (hard ? 0.35 : 0.2));
   }
+
+  // Cap interval for small vocabularies — no word disappears for more than 5 days
+  const MAX_INTERVAL = 5;
+  interval = Math.min(interval, MAX_INTERVAL);
 
   const nextReview = correct ? addDays(t, interval) : t;
 
@@ -78,7 +143,16 @@ function getDueWords(userId, limit) {
   const t = today();
   const dailyLimit = limit ?? getUserQuizLimit(userId);
 
-  const dueWords = db.prepare(`
+  // Step 1: Always include new words (not yet in sm2_reviews) — they MUST be quizzed today
+  const newWords = db.prepare(`
+    SELECT w.*, 0 as interval, 2.5 as efactor, 0 as repetitions, ? as next_review, 0 as is_wrong
+    FROM words w
+    WHERE w.user_id = ? AND w.id NOT IN (SELECT word_id FROM sm2_reviews WHERE user_id = ?)
+  `).all(t, userId, userId);
+
+  // Step 2: Fill remaining slots with due words
+  const remainingAfterNew = Math.max(0, dailyLimit - newWords.length);
+  const dueWords = remainingAfterNew > 0 ? db.prepare(`
     SELECT w.*, s.interval, s.efactor, s.repetitions, s.next_review,
            CASE WHEN s.last_review IS NULL OR s.repetitions = 0 THEN 1 ELSE 0 END as is_wrong
     FROM words w
@@ -86,41 +160,28 @@ function getDueWords(userId, limit) {
     WHERE s.user_id = ? AND s.next_review <= ?
     ORDER BY is_wrong DESC, s.next_review ASC
     LIMIT ?
-  `).all(userId, t, dailyLimit);
+  `).all(userId, t, remainingAfterNew) : [];
 
-  const remaining = Math.max(0, dailyLimit - dueWords.length);
-  const newWords = remaining > 0 ? db.prepare(`
-    SELECT w.*, 0 as interval, 2.5 as efactor, 0 as repetitions, ? as next_review, 0 as is_wrong
-    FROM words w
-    WHERE w.user_id = ? AND w.id NOT IN (SELECT word_id FROM sm2_reviews WHERE user_id = ?)
-    LIMIT ?
-  `).all(t, userId, userId, remaining) : [];
-
-  // If still under dailyLimit, fill with earliest upcoming reviews
+  // Step 3: If still under dailyLimit, fill with weighted random from upcoming reviews
   const fetched = dueWords.length + newWords.length;
   const extra = Math.max(0, dailyLimit - fetched);
-  const existingIds = fetched > 0 ? [...dueWords, ...newWords].map(w => w.id) : [];
-  const extraWords = extra > 0 && existingIds.length > 0 ? db.prepare(`
-    SELECT w.*, s.interval, s.efactor, s.repetitions, s.next_review,
-           CASE WHEN s.last_review IS NULL OR s.repetitions = 0 THEN 1 ELSE 0 END as is_wrong
-    FROM words w
-    JOIN sm2_reviews s ON w.id = s.word_id AND w.user_id = s.user_id
-    WHERE s.user_id = ?
-      AND s.next_review > ?
-      AND w.id NOT IN (${existingIds.join(',')})
-    ORDER BY s.next_review ASC
-    LIMIT ?
-  `).all(userId, t, extra) : extra > 0 ? db.prepare(`
-    SELECT w.*, s.interval, s.efactor, s.repetitions, s.next_review,
-           CASE WHEN s.last_review IS NULL OR s.repetitions = 0 THEN 1 ELSE 0 END as is_wrong
-    FROM words w
-    JOIN sm2_reviews s ON w.id = s.word_id AND w.user_id = s.user_id
-    WHERE s.user_id = ? AND s.next_review > ?
-    ORDER BY s.next_review ASC
-    LIMIT ?
-  `).all(userId, t, extra) : [];
+  const newWordIds = newWords.length > 0 ? newWords.map(w => w.id) : [];
+  const dueWordIds = dueWords.length > 0 ? dueWords.map(w => w.id) : [];
+  const existingIds = [...newWordIds, ...dueWordIds];
+  const placeholder = existingIds.length > 0 ? `AND w.id NOT IN (${existingIds.join(',')})` : '';
 
-  const allWords = [...dueWords, ...newWords, ...extraWords];
+  const candidates = extra > 0 ? db.prepare(`
+    SELECT w.*, s.interval, s.efactor, s.repetitions, s.next_review,
+           CASE WHEN s.last_review IS NULL OR s.repetitions = 0 THEN 1 ELSE 0 END as is_wrong,
+           CAST(julianday(s.next_review) - julianday(?) AS INTEGER) as days_until
+    FROM words w
+    JOIN sm2_reviews s ON w.id = s.word_id AND w.user_id = s.user_id
+    WHERE s.user_id = ? AND s.next_review > ? ${placeholder}
+  `).all(t, userId, t) : [];
+
+  const extraWords = weightedRandomSample(candidates, extra);
+
+  const allWords = [...newWords, ...dueWords, ...extraWords];
   // Randomize order so repeated quizzes aren't predictable
   return allWords.sort(() => Math.random() - 0.5);
 }

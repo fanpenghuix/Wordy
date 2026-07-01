@@ -46,8 +46,11 @@ router.get('/today', (req, res) => {
      ORDER BY s.word_order ASC`
   ).all(req.userId, today);
 
-  if (session.length > 0) {
-    // Shuffle restored session for varied order each visit
+  // Check if new words were added since the session was created
+  const totalCount = db.prepare('SELECT COUNT(*) as count FROM words WHERE user_id = ?').get(req.userId).count;
+
+  if (session.length > 0 && session.length >= totalCount) {
+    // No new words added — restore existing session (shuffle for varied order)
     const shuffled = session.sort(() => Math.random() - 0.5);
     const wordIds = shuffled.map(s => s.word_id);
     const words = db.prepare(
@@ -60,7 +63,7 @@ router.get('/today', (req, res) => {
     return res.json({ words: orderedWords, results, total: orderedWords.length });
   }
 
-  // New session
+  // New words detected or no session — regenerate to include new words
   const words = getDueWords(req.userId);
   if (words.length === 0) return res.json({ words: [], results: [], total: 0 });
 
