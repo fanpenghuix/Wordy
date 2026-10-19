@@ -55,10 +55,11 @@
   <div class="app" x-show="view === 'quiz'" x-cloak>
     <header>
       <div class="header-actions">
-        <button class="spell-mode-btn" x-show="currentUser" @click="toggleSpellMode()" :class="{ active: spellMode }" :title="spellMode ? '切换为认读模式' : '切换为拼写模式'">
-          <span x-show="!spellMode">✏️ 拼写模式</span>
-          <span x-show="spellMode">📖 认读模式</span>
-        </button>
+        <select class="quiz-mode-select" x-show="currentUser" x-model="quizMode" @change="changeQuizMode()">
+          <option value="reading">📖 认读模式</option>
+          <option value="spelling">✏️ 拼写模式</option>
+          <option value="listening">👂 听力模式</option>
+        </select>
         <div class="user-menu" x-show="currentUser">
           <button class="user-menu-trigger" @click="showUserMenu = !showUserMenu" @click.outside="showUserMenu = false">
             <span>👤</span><span x-text="currentUser?.username"></span>
@@ -117,12 +118,12 @@
 
     <div class="quiz-card" x-show="quizWords.length > 0 && currentWord && !loading && !quizComplete">
       <!-- Normal mode: show Chinese -->
-      <div class="quiz-word-area" x-show="!revealed && !spellMode" x-cloak>
+      <div class="quiz-word-area" x-show="!revealed && quizMode === 'reading'" x-cloak>
         <p class="chinese" x-text="currentWord?.chinese"></p>
       </div>
 
-      <!-- Spell mode: listen & hint area -->
-      <div class="quiz-word-area" x-show="!revealed && spellMode" x-cloak>
+      <!-- Spelling / listening mode: listen & hint area -->
+      <div class="quiz-word-area" x-show="!revealed && quizMode !== 'reading'" x-cloak>
         <div class="spell-hint-area">
           <button class="btn-speak-large" @click="speakWord()" title="听发音">
             <svg viewBox="0 0 24 24" width="48" height="48" fill="currentColor">
