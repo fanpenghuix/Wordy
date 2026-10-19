@@ -37,9 +37,9 @@ function quizApp() {
     _flyStarTarget: null,
     _isCorrectAnswer: true,
 
-    // Spell mode (persisted to user_preferences)
-    spellMode: false,
-    _spellModeLoaded: false,
+    // Quiz mode (persisted to user_preferences)
+    quizMode: 'reading',
+    _quizModeLoaded: false,
     hintRevealed: false,
     spellHint: '',
 
@@ -194,7 +194,7 @@ function quizApp() {
         if (res.ok) {
           const data = await res.json();
           this.currentUser = data.user;
-          await this.loadSpellMode();
+          await this.loadQuizMode();
           if (!this._voiceLoaded) {
             this._voiceLoaded = true;
             await this.loadVoices();
@@ -249,6 +249,7 @@ function quizApp() {
           this.currentUser = data.user;
           this.loginUsername = '';
           this.loginPassword = '';
+          await this.loadQuizMode();
           if (!this._voiceLoaded) {
             this._voiceLoaded = true;
             await this.loadVoices();
@@ -278,7 +279,7 @@ function quizApp() {
       this._quizInitialized = false;
       this.allWords = [];
       this._quizLimitLoaded = false;
-      this._spellModeLoaded = false;
+      this._quizModeLoaded = false;
       // Restore remembered credentials
       const saved = localStorage.getItem('loginUsername');
       if (saved) {
@@ -543,7 +544,7 @@ function quizApp() {
           body: JSON.stringify({
             word_id: this.currentWord.id,
             correct,
-            spellMode: this.spellMode,
+            quizMode: this.quizMode,
           }),
         });
       } catch (e) {
@@ -1122,34 +1123,62 @@ function quizApp() {
       this.playAudio('Hello, nice to meet you.', '.btn-preview');
     },
 
-    // ===== Spell Mode =====
+    // ===== Quiz Mode =====
 
-    async loadSpellMode() {
+    async loadQuizMode() {
       try {
-        const res = await fetch('/api/settings/spellMode');
+        const res = await fetch('/api/settings/quizMode');
         if (res.ok) {
           const data = await res.json();
-          this.spellMode = data.spellMode;
+          this.quizMode = data.quizMode || 'reading';
         }
       } catch (e) {
-        console.error('Failed to load spell mode:', e);
+        console.error('Failed to load quiz mode:', e);
       }
-      this._spellModeLoaded = true;
+      this._quizModeLoaded = true;
     },
 
-    async toggleSpellMode() {
-      this.spellMode = !this.spellMode;
+    async changeQuizMode() {
       this.hintRevealed = false;
       this.spellHint = '';
       try {
-        await fetch('/api/settings/spellMode', {
+        await fetch('/api/settings/quizMode', {
           method: 'PUT',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ spellMode: this.spellMode }),
+          body: JSON.stringify({ quizMode: this.quizMode }),
         });
       } catch (e) {
-        console.error('Failed to save spell mode:', e);
+        console.error('Failed to save quiz mode:', e);
       }
+    },
+
+    get showEnglishPrompt() {
+      return this.quizMode === 'reading' && !this.revealed;
+    },
+
+    get showChinesePrompt() {
+      return this.quizMode === 'spelling' && !this.revealed;
+    },
+
+    get showAudioOnly() {
+      return this.quizMode === 'listening' && !this.revealed;
+    },
+
+    get showEnglishAnswer() {
+      return this.revealed && (this.quizMode === 'spelling' || this.quizMode === 'listening');
+    },
+
+    get showChineseAnswer() {
+      return this.revealed && this.quizMode === 'reading';
+    },
+
+    get showAnswerAudio() {
+      return this.revealed && this.quizMode !== 'listening';
+    },
+
+    get showHintButton() {
+      return !this.revealed &&
+             (this.quizMode === 'spelling' || this.quizMode === 'listening');
     },
 
     // ===== User Management =====
