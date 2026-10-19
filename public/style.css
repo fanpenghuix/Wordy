@@ -201,23 +201,24 @@ header h1 {
 .quiz-mode-select {
   display: flex;
   align-items: center;
-  padding: 6px 14px;
-  border-radius: 24px;
-  border: 1px solid rgba(255, 255, 255, 0.12);
+  gap: clamp(4px, 0.8vw, 8px);
   background: rgba(255, 255, 255, 0.08);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 24px;
+  padding: 6px 14px;
   color: #e2e8f0;
   font-size: clamp(12px, 2vh, 14px);
   cursor: pointer;
-  transition: all 0.2s;
+  transition: background 0.2s;
   white-space: nowrap;
   appearance: none;
   -webkit-appearance: none;
   -moz-appearance: none;
-  padding-right: 28px;
-  background-image: url("data:image/svg+xml;charset=UTF-8,%3csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='%23e2e8f0'%3e%3cpath d='M7 10l5 5 5-5z'/%3e%3c/svg%3e");
+  padding-right: 32px;
+  background-image: url("data:image/svg+xml;charset=UTF-8,%3csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='%2394a3b8'%3e%3cpath d='M7 10l5 5 5-5z'/%3e%3c/svg%3e");
   background-repeat: no-repeat;
-  background-position: right 6px center;
-  background-size: 16px;
+  background-position: right 8px center;
+  background-size: 14px;
 }
 
 .quiz-mode-select:hover {
