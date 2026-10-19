@@ -42,10 +42,19 @@ function addRecord(wordId, correct, date) {
 
 describe('Stats API', () => {
   beforeAll(() => {
-    db.exec(`INSERT OR IGNORE INTO users (id, username, password_hash, role) VALUES (1, 'testuser', 'dummy', 'user')`);
+    // Ensure testuser always has id=1 regardless of test execution order
+    db.exec("DELETE FROM quiz_session WHERE user_id IN (SELECT id FROM users WHERE username = 'testuser')");
+    db.exec("DELETE FROM quiz_records WHERE user_id IN (SELECT id FROM users WHERE username = 'testuser')");
+    db.exec("DELETE FROM sm2_reviews WHERE user_id IN (SELECT id FROM users WHERE username = 'testuser')");
+    db.exec("DELETE FROM words WHERE user_id IN (SELECT id FROM users WHERE username = 'testuser')");
+    db.exec("DELETE FROM users WHERE username = 'testuser'");
+    db.exec('DELETE FROM users WHERE id = 1');
+    db.exec("DELETE FROM sqlite_sequence WHERE name = 'users'");
+    db.exec(`INSERT INTO users (id, username, password_hash, role) VALUES (1, 'testuser', 'dummy', 'user')`);
   });
 
   beforeEach(() => {
+    db.exec('DELETE FROM quiz_session');
     db.exec('DELETE FROM quiz_records');
     db.exec('DELETE FROM sm2_reviews');
     db.exec('DELETE FROM words');

@@ -12,6 +12,8 @@ describe('SM-2 Algorithm', () => {
   }
 
   function cleanup(userId) {
+    db.prepare('DELETE FROM quiz_session WHERE user_id = ?').run(userId);
+    db.prepare('DELETE FROM quiz_records WHERE user_id = ?').run(userId);
     db.prepare('DELETE FROM sm2_reviews WHERE user_id = ?').run(userId);
     db.prepare('DELETE FROM words WHERE user_id = ?').run(userId);
     db.prepare('DELETE FROM users WHERE id = ?').run(userId);

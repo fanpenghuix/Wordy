@@ -53,7 +53,14 @@ function setSm2Due(wordId, interval, repetitions) {
 
 describe('Quiz API (SM-2)', () => {
   beforeAll(() => {
-    db.prepare(`INSERT OR IGNORE INTO users (id, username, password_hash, role) VALUES (?, 'testuser', 'dummy', 'user')`).run(TEST_USER_ID);
+    // Ensure quiz test user always has id=9999 regardless of test execution order
+    db.exec("DELETE FROM quiz_session WHERE user_id IN (SELECT id FROM users WHERE username = 'quiz_test_user')");
+    db.exec("DELETE FROM quiz_records WHERE user_id IN (SELECT id FROM users WHERE username = 'quiz_test_user')");
+    db.exec("DELETE FROM sm2_reviews WHERE user_id IN (SELECT id FROM users WHERE username = 'quiz_test_user')");
+    db.exec("DELETE FROM words WHERE user_id IN (SELECT id FROM users WHERE username = 'quiz_test_user')");
+    db.exec("DELETE FROM users WHERE username = 'quiz_test_user'");
+    db.exec('DELETE FROM users WHERE id = 9999');
+    db.prepare(`INSERT INTO users (id, username, password_hash, role) VALUES (9999, 'quiz_test_user', 'dummy', 'user')`).run();
   });
 
   beforeEach(() => {
@@ -184,26 +191,49 @@ describe('Quiz API (SM-2)', () => {
   });
 
   describe('POST /api/quiz/record', () => {
-    it('should record a correct answer', async () => {
+    it('should record a correct answer with quizMode', async () => {
       const word = addWord('apple', '苹果');
       const res = await request(testApp)
         .post('/api/quiz/record')
-        .send({ word_id: word.lastInsertRowid, correct: 1 });
+        .send({ word_id: word.lastInsertRowid, correct: 1, quizMode: 'spelling' });
 
       expect(res.status).toBe(201);
       const record = db.prepare('SELECT * FROM quiz_records WHERE word_id = ?').get(word.lastInsertRowid);
       expect(record.correct).toBe(1);
+      expect(record.quiz_mode).toBe('spelling');
     });
 
-    it('should record an incorrect answer', async () => {
+    it('should record an incorrect answer with quizMode', async () => {
       const word = addWord('apple', '苹果');
       const res = await request(testApp)
         .post('/api/quiz/record')
-        .send({ word_id: word.lastInsertRowid, correct: 0 });
+        .send({ word_id: word.lastInsertRowid, correct: 0, quizMode: 'reading' });
 
       expect(res.status).toBe(201);
       const record = db.prepare('SELECT * FROM quiz_records WHERE word_id = ?').get(word.lastInsertRowid);
       expect(record.correct).toBe(0);
+      expect(record.quiz_mode).toBe('reading');
+    });
+
+    it('should accept listening quizMode', async () => {
+      const word = addWord('test', '测试');
+      const res = await request(testApp)
+        .post('/api/quiz/record')
+        .send({ word_id: word.lastInsertRowid, correct: 1, quizMode: 'listening' });
+
+      expect(res.status).toBe(201);
+      const record = db.prepare('SELECT * FROM quiz_records WHERE word_id = ?').get(word.lastInsertRowid);
+      expect(record.quiz_mode).toBe('listening');
+    });
+
+    it('should reject invalid quizMode', async () => {
+      const word = addWord('test', '测试');
+      const res = await request(testApp)
+        .post('/api/quiz/record')
+        .send({ word_id: word.lastInsertRowid, correct: 1, quizMode: 'invalid' });
+
+      expect(res.status).toBe(400);
+      expect(res.body.error).toBe('Invalid quizMode');
     });
 
     it('should update SM-2 state on correct answer', async () => {
@@ -212,7 +242,7 @@ describe('Quiz API (SM-2)', () => {
 
       await request(testApp)
         .post('/api/quiz/record')
-        .send({ word_id: word.lastInsertRowid, correct: 1 });
+        .send({ word_id: word.lastInsertRowid, correct: 1, quizMode: 'spelling' });
 
       const state = db.prepare('SELECT * FROM sm2_reviews WHERE word_id = ?').get(word.lastInsertRowid);
       expect(state.repetitions).toBe(1);

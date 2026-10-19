@@ -55,10 +55,25 @@
   <div class="app" x-show="view === 'quiz'" x-cloak>
     <header>
       <div class="header-actions">
-        <button class="spell-mode-btn" x-show="currentUser" @click="toggleSpellMode()" :class="{ active: spellMode }" :title="spellMode ? '切换为认读模式' : '切换为拼写模式'">
-          <span x-show="!spellMode">✏️ 拼写模式</span>
-          <span x-show="spellMode">📖 认读模式</span>
-        </button>
+        <div class="user-menu" x-show="currentUser">
+          <button class="user-menu-trigger" @click="showQuizModeMenu = !showQuizModeMenu" @click.outside="showQuizModeMenu = false">
+            <span x-text="quizMode === 'reading' ? '📖 认读模式' : quizMode === 'spelling' ? '✏️ 拼写模式' : '👂 听力模式'"></span>
+            <svg class="user-menu-chevron" viewBox="0 0 24 24" width="14" height="14" fill="currentColor" :class="{ open: showQuizModeMenu }">
+              <path d="M7 10l5 5 5-5z"/>
+            </svg>
+          </button>
+          <div class="user-menu-dropdown" x-show="showQuizModeMenu" x-cloak x-transition>
+            <button class="dropdown-item" @click="quizMode = 'reading'; changeQuizMode(); showQuizModeMenu = false">
+              <span>📖</span> 认读模式
+            </button>
+            <button class="dropdown-item" @click="quizMode = 'spelling'; changeQuizMode(); showQuizModeMenu = false">
+              <span>✏️</span> 拼写模式
+            </button>
+            <button class="dropdown-item" @click="quizMode = 'listening'; changeQuizMode(); showQuizModeMenu = false">
+              <span>👂</span> 听力模式
+            </button>
+          </div>
+        </div>
         <div class="user-menu" x-show="currentUser">
           <button class="user-menu-trigger" @click="showUserMenu = !showUserMenu" @click.outside="showUserMenu = false">
             <span>👤</span><span x-text="currentUser?.username"></span>
@@ -116,33 +131,63 @@
     </div>
 
     <div class="quiz-card" x-show="quizWords.length > 0 && currentWord && !loading && !quizComplete">
-      <!-- Normal mode: show Chinese -->
-      <div class="quiz-word-area" x-show="!revealed && !spellMode" x-cloak>
+      <!-- 认读模式：初始显示英文 -->
+      <div class="quiz-word-area" x-show="showEnglishPrompt" x-cloak>
+        <p class="english" x-text="currentWord?.english"></p>
+      </div>
+
+      <!-- 拼写模式：初始显示中文 -->
+      <div class="quiz-word-area" x-show="showChinesePrompt" x-cloak>
         <p class="chinese" x-text="currentWord?.chinese"></p>
       </div>
 
-      <!-- Spell mode: listen & hint area -->
-      <div class="quiz-word-area" x-show="!revealed && spellMode" x-cloak>
+      <!-- 听力模式：初始只显示发音按钮 -->
+      <div class="quiz-word-area" x-show="showAudioOnly" x-cloak>
         <div class="spell-hint-area">
           <button class="btn-speak-large" @click="speakWord()" title="听发音">
             <svg viewBox="0 0 24 24" width="48" height="48" fill="currentColor">
               <path d="M3 9v6h4l5 5V4L7 9H3zm13.5 3c0-1.77-1.02-3.29-2.5-4.03v8.05c1.48-.73 2.5-2.25 2.5-4.02zM14 3.23v2.06c2.89.86 5 3.54 5 6.71s-2.11 5.85-5 6.71v2.06c4.01-.91 7-4.49 7-8.77s-2.99-7.86-7-8.77z"/>
             </svg>
           </button>
-          <p class="spell-hint" x-show="hintRevealed" x-text="spellHint"></p>
-          <button class="btn-hint" x-show="!hintRevealed" @click="showSpellHint()">🔤 提示首字母</button>
         </div>
       </div>
 
+      <!-- 提示首字母（拼写/听力模式） -->
+      <div x-show="showHintButton && !hintRevealed" style="text-align: center;">
+        <button class="btn-hint" @click="showSpellHint()">💡 提示首字母</button>
+      </div>
+      <p class="spell-hint" x-show="hintRevealed" x-text="spellHint"></p>
+
+      <!-- 显示答案后的内容 -->
       <div class="quiz-word-area" x-show="revealed" x-cloak>
-        <div class="word-with-speak">
-          <p class="english" :class="{ 'incorrect': markWrong, 'correct': correctFlash }" x-text="currentWord?.english"></p>
-          <button class="btn-speak" @click="speakWord()" title="英式发音朗读">
-            <svg viewBox="0 0 24 24" width="24" height="24" fill="currentColor">
-              <path d="M3 9v6h4l5 5V4L7 9H3zm13.5 3c0-1.77-1.02-3.29-2.5-4.03v8.05c1.48-.73 2.5-2.25 2.5-4.02zM14 3.23v2.06c2.89.86 5 3.54 5 6.71s-2.11 5.85-5 6.71v2.06c4.01-.91 7-4.49 7-8.77s-2.99-7.86-7-8.77z"/>
-            </svg>
-          </button>
-        </div>
+        <!-- 认读模式答案：中文 + 发音 -->
+        <template x-if="showChineseAnswer">
+          <div class="word-with-speak">
+            <p class="chinese" x-text="currentWord?.chinese"></p>
+            <button class="btn-speak" @click="speakWord()" title="英式发音朗读">
+              <svg viewBox="0 0 24 24" width="24" height="24" fill="currentColor">
+                <path d="M3 9v6h4l5 5V4L7 9H3zm13.5 3c0-1.77-1.02-3.29-2.5-4.03v8.05c1.48-.73 2.5-2.25 2.5-4.02zM14 3.23v2.06c2.89.86 5 3.54 5 6.71s-2.11 5.85-5 6.71v2.06c4.01-.91 7-4.49 7-8.77s-2.99-7.86-7-8.77z"/>
+              </svg>
+            </button>
+          </div>
+        </template>
+
+        <!-- 拼写模式答案：英文 + 发音 -->
+        <template x-if="showEnglishAnswer">
+          <div class="word-with-speak">
+            <p class="english" :class="{ 'incorrect': markWrong, 'correct': correctFlash }" x-text="currentWord?.english"></p>
+            <button x-show="showAnswerAudio" class="btn-speak" @click="speakWord()" title="英式发音朗读">
+              <svg viewBox="0 0 24 24" width="24" height="24" fill="currentColor">
+                <path d="M3 9v6h4l5 5V4L7 9H3zm13.5 3c0-1.77-1.02-3.29-2.5-4.03v8.05c1.48-.73 2.5-2.25 2.5-4.02zM14 3.23v2.06c2.89.86 5 3.54 5 6.71s-2.11 5.85-5 6.71v2.06c4.01-.91 7-4.49 7-8.77s-2.99-7.86-7-8.77z"/>
+              </svg>
+            </button>
+          </div>
+        </template>
+
+        <!-- 听力模式答案额外显示中文 -->
+        <template x-if="revealed && quizMode === 'listening'">
+          <p class="chinese" x-text="currentWord?.chinese"></p>
+        </template>
       </div>
 
       <div class="quiz-actions">

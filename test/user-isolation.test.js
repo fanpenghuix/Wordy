@@ -48,7 +48,8 @@ describe('User Data Isolation', () => {
   let userAId, userBId;
 
   beforeAll(async () => {
-    // Clean up any leftover test data
+    // Clean up any leftover test data (order matters for FK constraints)
+    db.exec('DELETE FROM quiz_session');
     db.exec('DELETE FROM quiz_records');
     db.exec('DELETE FROM sm2_reviews');
     db.exec('DELETE FROM words');
@@ -63,6 +64,7 @@ describe('User Data Isolation', () => {
   });
 
   beforeEach(() => {
+    db.exec('DELETE FROM quiz_session');
     db.exec('DELETE FROM quiz_records');
     db.exec('DELETE FROM sm2_reviews');
     db.exec('DELETE FROM words');
@@ -70,7 +72,11 @@ describe('User Data Isolation', () => {
   });
 
   afterAll(() => {
-    // Clean up isolation test users
+    // Clean up in FK-safe order
+    db.exec('DELETE FROM quiz_session');
+    db.exec('DELETE FROM quiz_records');
+    db.exec('DELETE FROM sm2_reviews');
+    db.exec('DELETE FROM words');
     db.exec("DELETE FROM users WHERE username IN ('alice', 'bob')");
   });
 
@@ -137,7 +143,7 @@ describe('User Data Isolation', () => {
       const insert = db.prepare('INSERT INTO words (english, chinese, user_id) VALUES (?, ?, ?)').run('gamma', '伽马', userAId);
       const wordId = insert.lastInsertRowid;
 
-      await request(appA).post('/api/quiz/record').send({ word_id: wordId, correct: 1 });
+      await request(appA).post('/api/quiz/record').send({ word_id: wordId, correct: 1, quizMode: 'reading' });
 
       const record = db.prepare('SELECT * FROM quiz_records WHERE word_id = ?').get(wordId);
       expect(record.user_id).toBe(userAId);

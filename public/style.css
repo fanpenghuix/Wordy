@@ -198,31 +198,6 @@ header h1 {
   order: 2;
 }
 
-.spell-mode-btn {
-  display: flex;
-  align-items: center;
-  padding: 6px 14px;
-  border-radius: 20px;
-  border: 1px solid rgba(255, 255, 255, 0.12);
-  background: rgba(255, 255, 255, 0.05);
-  color: #94a3b8;
-  font-size: clamp(12px, 2vh, 14px);
-  cursor: pointer;
-  transition: all 0.2s;
-  white-space: nowrap;
-}
-
-.spell-mode-btn:hover {
-  background: rgba(255, 255, 255, 0.1);
-  border-color: #7c3aed;
-}
-
-.spell-mode-btn.active {
-  background: rgba(124, 58, 237, 0.25);
-  border-color: #7c3aed;
-  color: #c4b5fd;
-}
-
 .spell-hint-area {
   display: flex;
   flex-direction: column;
@@ -281,6 +256,17 @@ header h1 {
   background: rgba(124, 58, 237, 0.15);
   border-color: #7c3aed;
   color: #c4b5fd;
+}
+
+/* ===== Quiz Mode Answer Display ===== */
+
+/* Audio-only container for listening mode prompt */
+.audio-only {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  min-height: clamp(150px, 30vh, 250px);
+  width: 100%;
 }
 
 .quiz-card {
@@ -1601,6 +1587,8 @@ header h1 {
   .action-buttons-inline { gap: 8px; flex-wrap: wrap; }
 
   .quiz-actions { height: auto; padding: clamp(6px, 1.5vh, 8px); }
+
+  .audio-only { min-height: 120px; }
 
   .progress { font-size: 12px; padding: 4px 10px; }
   .user-menu-trigger { padding: 4px 10px; font-size: 13px; }
