@@ -3,6 +3,7 @@ function quizApp() {
     view: '',
     currentUser: null,
     showUserMenu: false,
+    showQuizModeMenu: false,
     adminTab: 'voice',
     statsTab: 'sm2',
 
@@ -274,6 +275,7 @@ function quizApp() {
       }
       this.currentUser = null;
       this.showUserMenu = false;
+      this.showQuizModeMenu = false;
       this.quizWords = [];
       this.quizResults = [];
       this._quizInitialized = false;
