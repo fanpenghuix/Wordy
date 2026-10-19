@@ -83,7 +83,7 @@ router.get('/today', (req, res) => {
 
 // POST /api/quiz/record — record a quiz answer
 router.post('/record', (req, res) => {
-  const { word_id, correct, spellMode } = req.body;
+  const { word_id, correct, quizMode } = req.body;
 
   if (!word_id || correct === undefined || correct === null) {
     return res.status(400).json({ error: 'word_id and correct are required' });
@@ -93,13 +93,19 @@ router.post('/record', (req, res) => {
     return res.status(400).json({ error: 'correct must be 0 or 1' });
   }
 
+  // Validate quizMode
+  const QUIZ_MODE_OPTIONS = ['reading', 'spelling', 'listening'];
+  if (!QUIZ_MODE_OPTIONS.includes(quizMode)) {
+    return res.status(400).json({ error: 'Invalid quizMode' });
+  }
+
   const today = new Date().toISOString().slice(0, 10);
 
   const result = db.prepare(
-    'INSERT INTO quiz_records (word_id, correct, quiz_date, user_id) VALUES (?, ?, ?, ?)'
-  ).run(word_id, correct, today, req.userId);
+    'INSERT INTO quiz_records (word_id, correct, quiz_mode, quiz_date, user_id) VALUES (?, ?, ?, ?, ?)'
+  ).run(word_id, correct, quizMode, today, req.userId);
 
-  recordResult(req.userId, word_id, correct === 1, !!spellMode);
+  recordResult(req.userId, word_id, correct === 1, false);
 
   // Update session result
   db.prepare(

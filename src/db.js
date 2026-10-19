@@ -44,6 +44,7 @@ if (wordsColumns.length === 0) {
       user_id INTEGER REFERENCES users(id),
       word_id INTEGER NOT NULL REFERENCES words(id),
       correct INTEGER NOT NULL CHECK(correct IN (0, 1)),
+      quiz_mode TEXT NOT NULL DEFAULT 'reading',
       quiz_date TEXT NOT NULL DEFAULT (date('now'))
     );
   `);
@@ -112,6 +113,17 @@ db.exec(`
   );
 `);
 db.exec(`CREATE INDEX IF NOT EXISTS idx_sm2_reviews_next_review ON sm2_reviews(next_review)`);
+
+// Migration: add quiz_mode column to quiz_records for tracking quiz type
+try {
+  db.exec(`ALTER TABLE quiz_records ADD COLUMN quiz_mode TEXT NOT NULL DEFAULT 'reading'`);
+} catch (e) {
+  if (!e.message.includes('duplicate column name') &&
+      !e.message.includes('already exists')) {
+    throw e;
+  }
+  // Column already exists — migration already applied
+}
 
 // Migration: add pre_today_state column for same-day dedup
 try {
