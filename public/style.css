@@ -202,10 +202,10 @@ header h1 {
   display: flex;
   align-items: center;
   padding: 6px 14px;
-  border-radius: 20px;
+  border-radius: 24px;
   border: 1px solid rgba(255, 255, 255, 0.12);
-  background: rgba(255, 255, 255, 0.05);
-  color: #c4b5fd;
+  background: rgba(255, 255, 255, 0.08);
+  color: #e2e8f0;
   font-size: clamp(12px, 2vh, 14px);
   cursor: pointer;
   transition: all 0.2s;
@@ -214,26 +214,24 @@ header h1 {
   -webkit-appearance: none;
   -moz-appearance: none;
   padding-right: 28px;
-  background-image: url("data:image/svg+xml;charset=UTF-8,%3csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='%23c4b5fd'%3e%3cpath d='M7 10l5 5 5-5z'/%3e%3c/svg%3e");
+  background-image: url("data:image/svg+xml;charset=UTF-8,%3csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='%23e2e8f0'%3e%3cpath d='M7 10l5 5 5-5z'/%3e%3c/svg%3e");
   background-repeat: no-repeat;
   background-position: right 6px center;
   background-size: 16px;
 }
 
 .quiz-mode-select:hover {
-  background-color: rgba(255, 255, 255, 0.1);
-  border-color: #7c3aed;
+  background: rgba(255, 255, 255, 0.15);
 }
 
 .quiz-mode-select:focus {
   outline: none;
-  border-color: #7c3aed;
-  box-shadow: 0 0 0 2px rgba(124, 58, 237, 0.25);
+  border-color: rgba(255, 255, 255, 0.25);
 }
 
 .quiz-mode-select option {
   background: #1e1b2e;
-  color: #c4b5fd;
+  color: #e2e8f0;
 }
 
 .spell-hint-area {

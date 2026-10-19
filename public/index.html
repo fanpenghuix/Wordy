@@ -139,7 +139,7 @@
       </div>
 
       <!-- 提示首字母（拼写/听力模式） -->
-      <div x-show="showHintButton && !hintRevealed">
+      <div x-show="showHintButton && !hintRevealed" style="text-align: center;">
         <button class="btn-hint" @click="showSpellHint()">💡 提示首字母</button>
       </div>
       <p class="spell-hint" x-show="hintRevealed" x-text="spellHint"></p>
