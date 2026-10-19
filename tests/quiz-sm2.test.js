@@ -10,7 +10,8 @@ describe('Quiz API with SM-2', () => {
 
   beforeAll(async () => {
     agent = request.agent(app);
-    // Create a test user and login
+    // Create a test user and login (clean up in FK-safe order)
+    db.prepare("DELETE FROM quiz_session WHERE user_id = (SELECT id FROM users WHERE username = 'quiz_test_user')").run();
     db.prepare("DELETE FROM quiz_records WHERE user_id = (SELECT id FROM users WHERE username = 'quiz_test_user')").run();
     db.prepare("DELETE FROM sm2_reviews WHERE user_id = (SELECT id FROM users WHERE username = 'quiz_test_user')").run();
     db.prepare("DELETE FROM words WHERE user_id = (SELECT id FROM users WHERE username = 'quiz_test_user')").run();

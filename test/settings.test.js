@@ -45,6 +45,7 @@ describe('Settings API', () => {
   beforeEach(async () => {
     db.exec('DELETE FROM user_preferences');
     db.exec('DELETE FROM quiz_session');
+    db.exec('DELETE FROM quiz_session');
     db.exec('DELETE FROM quiz_records');
     db.exec('DELETE FROM sm2_reviews');
     db.exec('DELETE FROM words');

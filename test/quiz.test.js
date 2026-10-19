@@ -53,7 +53,14 @@ function setSm2Due(wordId, interval, repetitions) {
 
 describe('Quiz API (SM-2)', () => {
   beforeAll(() => {
-    db.prepare(`INSERT OR IGNORE INTO users (id, username, password_hash, role) VALUES (?, 'testuser', 'dummy', 'user')`).run(TEST_USER_ID);
+    // Ensure quiz test user always has id=9999 regardless of test execution order
+    db.exec("DELETE FROM quiz_session WHERE user_id IN (SELECT id FROM users WHERE username = 'quiz_test_user')");
+    db.exec("DELETE FROM quiz_records WHERE user_id IN (SELECT id FROM users WHERE username = 'quiz_test_user')");
+    db.exec("DELETE FROM sm2_reviews WHERE user_id IN (SELECT id FROM users WHERE username = 'quiz_test_user')");
+    db.exec("DELETE FROM words WHERE user_id IN (SELECT id FROM users WHERE username = 'quiz_test_user')");
+    db.exec("DELETE FROM users WHERE username = 'quiz_test_user'");
+    db.exec('DELETE FROM users WHERE id = 9999');
+    db.prepare(`INSERT INTO users (id, username, password_hash, role) VALUES (9999, 'quiz_test_user', 'dummy', 'user')`).run();
   });
 
   beforeEach(() => {
