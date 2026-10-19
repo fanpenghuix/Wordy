@@ -44,15 +44,17 @@ describe('Settings API', () => {
 
   beforeEach(async () => {
     db.exec('DELETE FROM user_preferences');
+    db.exec('DELETE FROM quiz_session');
     db.exec('DELETE FROM quiz_records');
     db.exec('DELETE FROM sm2_reviews');
     db.exec('DELETE FROM words');
-    // Clean up test users but not admin (created by other tests' beforeAll)
-    db.exec("DELETE FROM users WHERE username NOT IN ('admin', 'testuser')");
-    // Ensure testuser exists for this test file
-    try {
-      await seedUser();
-    } catch (e) { /* already exists */ }
+    // Ensure testuser exists with correct password hash (idempotent)
+    // Uses UPSERT to fix password hash if another test file created testuser with wrong hash
+    const hash = bcrypt.hashSync('Test123456', 10);
+    db.prepare(`
+      INSERT INTO users (username, password_hash, role) VALUES ('testuser', ?, 'user')
+      ON CONFLICT(username) DO UPDATE SET password_hash = excluded.password_hash
+    `).run(hash);
   });
 
   describe('GET /api/settings/voice', () => {
@@ -181,6 +183,127 @@ describe('Settings API', () => {
       expect(res.status).toBe(200);
       expect(res.body.speakGender).toBe('male');
       expect(res.body.theme).toBe('dark');
+    });
+  });
+
+  describe('quizMode API', () => {
+    describe('GET /api/settings/quizMode', () => {
+      it('should return 401 when not logged in', async () => {
+        const res = await request(app).get('/api/settings/quizMode');
+        expect(res.status).toBe(401);
+      });
+
+      it('should return default value "reading" when no setting saved', async () => {
+        const agent = request.agent(app);
+        await loginAs(agent, 'testuser', 'Test123456');
+
+        const res = await agent.get('/api/settings/quizMode');
+        expect(res.status).toBe(200);
+        expect(res.body.quizMode).toBe('reading');
+      });
+
+      it('should return saved quizMode value', async () => {
+        const agent = request.agent(app);
+        await loginAs(agent, 'testuser', 'Test123456');
+
+        const uid = db.prepare('SELECT id FROM users WHERE username = ?').get('testuser').id;
+        db.prepare('INSERT INTO user_preferences (user_id, key, value) VALUES (?, ?, ?)').run(uid, 'quizMode', 'spelling');
+
+        const res = await agent.get('/api/settings/quizMode');
+        expect(res.status).toBe(200);
+        expect(res.body.quizMode).toBe('spelling');
+      });
+    });
+
+    describe('PUT /api/settings/quizMode', () => {
+      it('should return 401 when not logged in', async () => {
+        const res = await request(app).put('/api/settings/quizMode').send({ quizMode: 'spelling' });
+        expect(res.status).toBe(401);
+      });
+
+      it('should save valid quizMode value "spelling"', async () => {
+        const agent = request.agent(app);
+        await loginAs(agent, 'testuser', 'Test123456');
+
+        const res = await agent.put('/api/settings/quizMode').send({ quizMode: 'spelling' });
+        expect(res.status).toBe(200);
+        expect(res.body.success).toBe(true);
+
+        const getRes = await agent.get('/api/settings/quizMode');
+        expect(getRes.body.quizMode).toBe('spelling');
+      });
+
+      it('should save valid quizMode value "listening"', async () => {
+        const agent = request.agent(app);
+        await loginAs(agent, 'testuser', 'Test123456');
+
+        const res = await agent.put('/api/settings/quizMode').send({ quizMode: 'listening' });
+        expect(res.status).toBe(200);
+
+        const getRes = await agent.get('/api/settings/quizMode');
+        expect(getRes.body.quizMode).toBe('listening');
+      });
+
+      it('should save valid quizMode value "reading"', async () => {
+        const agent = request.agent(app);
+        await loginAs(agent, 'testuser', 'Test123456');
+
+        // First set to spelling
+        await agent.put('/api/settings/quizMode').send({ quizMode: 'spelling' });
+
+        // Then back to reading
+        const res = await agent.put('/api/settings/quizMode').send({ quizMode: 'reading' });
+        expect(res.status).toBe(200);
+
+        const getRes = await agent.get('/api/settings/quizMode');
+        expect(getRes.body.quizMode).toBe('reading');
+      });
+
+      it('should reject invalid quizMode value', async () => {
+        const agent = request.agent(app);
+        await loginAs(agent, 'testuser', 'Test123456');
+
+        const res = await agent.put('/api/settings/quizMode').send({ quizMode: 'invalid' });
+        expect(res.status).toBe(400);
+      });
+
+      it('should reject non-string quizMode value', async () => {
+        const agent = request.agent(app);
+        await loginAs(agent, 'testuser', 'Test123456');
+
+        const res = await agent.put('/api/settings/quizMode').send({ quizMode: 123 });
+        expect(res.status).toBe(400);
+      });
+
+      it('should support all three mode values in sequence', async () => {
+        const agent = request.agent(app);
+        await loginAs(agent, 'testuser', 'Test123456');
+
+        for (const mode of ['reading', 'spelling', 'listening']) {
+          await agent.put('/api/settings/quizMode').send({ quizMode: mode });
+          const res = await agent.get('/api/settings/quizMode');
+          expect(res.body.quizMode).toBe(mode);
+        }
+      });
+
+      it('should not affect other users', async () => {
+        try { await seedUser('user1'); } catch (e) {}
+        try { await seedUser('user2'); } catch (e) {}
+
+        const agent1 = request.agent(app);
+        const agent2 = request.agent(app);
+        await loginAs(agent1, 'user1', 'Test123456');
+        await loginAs(agent2, 'user2', 'Test123456');
+
+        await agent1.put('/api/settings/quizMode').send({ quizMode: 'spelling' });
+        await agent2.put('/api/settings/quizMode').send({ quizMode: 'listening' });
+
+        const res1 = await agent1.get('/api/settings/quizMode');
+        const res2 = await agent2.get('/api/settings/quizMode');
+
+        expect(res1.body.quizMode).toBe('spelling');
+        expect(res2.body.quizMode).toBe('listening');
+      });
     });
   });
 });

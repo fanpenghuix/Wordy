@@ -108,31 +108,32 @@ router.put('/quizLimit', (req, res) => {
   res.json({ success: true });
 });
 
-// --- Spell Mode Setting ---
+// --- Quiz Mode Setting ---
 
-const SPELL_MODE_DEFAULT = false;
+const QUIZ_MODE_DEFAULT = 'reading';
+const QUIZ_MODE_OPTIONS = ['reading', 'spelling', 'listening'];
 
-router.get('/spellMode', (req, res) => {
+router.get('/quizMode', (req, res) => {
   if (!req.session?.userId) return res.status(401).json({ error: 'Unauthorized' });
 
   const val = db.prepare('SELECT value FROM user_preferences WHERE user_id = ? AND key = ?')
-    .get(req.session.userId, 'spellMode')?.value;
+    .get(req.session.userId, 'quizMode')?.value;
 
-  res.json({ spellMode: val !== undefined ? val === 'true' : SPELL_MODE_DEFAULT });
+  res.json({ quizMode: val ?? QUIZ_MODE_DEFAULT });
 });
 
-router.put('/spellMode', (req, res) => {
+router.put('/quizMode', (req, res) => {
   if (!req.session?.userId) return res.status(401).json({ error: 'Unauthorized' });
 
-  const { spellMode } = req.body;
-  if (typeof spellMode !== 'boolean') {
-    return res.status(400).json({ error: 'spellMode must be a boolean' });
+  const { quizMode } = req.body;
+  if (!QUIZ_MODE_OPTIONS.includes(quizMode)) {
+    return res.status(400).json({ error: `quizMode must be one of: ${QUIZ_MODE_OPTIONS.join(', ')}` });
   }
 
   db.prepare(`
     INSERT INTO user_preferences (user_id, key, value) VALUES (?, ?, ?)
     ON CONFLICT(user_id, key) DO UPDATE SET value = excluded.value, updated_at = datetime('now')
-  `).run(req.session.userId, 'spellMode', spellMode ? 'true' : 'false');
+  `).run(req.session.userId, 'quizMode', quizMode);
 
   res.json({ success: true });
 });
